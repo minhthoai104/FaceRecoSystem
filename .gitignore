@@ -1,0 +1,19 @@
+# Bỏ qua các thư mục build của Visual Studio
+bin/
+obj/
+.vs/
+
+# Bỏ qua thư mục chứa các gói thư viện đã tải về
+packages/
+
+# Bỏ qua các file cấu hình người dùng
+*.user
+*.suo
+
+# Bỏ qua các file model lớn và các loại file nhị phân khác
+*.onnx
+*.pb
+*.pt
+*.zip
+*.rar
+*.mp4
