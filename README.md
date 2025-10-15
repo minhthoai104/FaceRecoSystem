@@ -4,7 +4,7 @@
 
 1.  **Clone repository:**
     ```bash
-    git clone [https://github.com/minhthoai104/FaceRecoSystem.git](https://github.com/minhthoai104/FaceRecoSystem.git)
+    git clone https://github.com/minhthoai104/FaceRecoSystem.git
     ```
 
 2.  **Cài đặt Cơ sở dữ liệu:**
