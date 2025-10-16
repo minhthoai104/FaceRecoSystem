@@ -1,5 +1,6 @@
-﻿using Emgu.CV; // Thêm using cho Emgu.CV
+﻿using Emgu.CV;
 using Emgu.CV.Structure;
+using FaceRecoSystem.core;
 using System;
 using System.Drawing;
 using System.Windows.Forms;
@@ -10,18 +11,15 @@ namespace FaceRecoSystem.controls
     public partial class DeletePersonControl : UserControl
     {
         private readonly PersonManager _personMgr;
-        private VideoCapture _capture; // Đối tượng để lấy hình ảnh từ camera
-        private bool _isScanning = false;
+        private VideoCapture _capture; private bool _isScanning = false;
         private string _recognizedName = null;
 
         public DeletePersonControl(PersonManager personMgr)
         {
             InitializeComponent();
             _personMgr = personMgr;
-            // Không gọi InitUI() ở đây nữa vì nó sẽ được xử lý bởi file Designer
         }
 
-        // --- Logic cho Tab 1: Xóa theo Tên ---
         private void BtnDeleteByName_Click(object sender, EventArgs e)
         {
             string name = txtName.Text.Trim();
@@ -32,18 +30,11 @@ namespace FaceRecoSystem.controls
                 return;
             }
 
-            var confirm = MessageBox.Show(
-                $"Bạn có chắc chắn muốn xóa '{name}' không? Hành động này không thể hoàn tác.",
-                "Xác nhận xóa",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
-
-            if (confirm != DialogResult.Yes)
+            if (!ConfirmDeletion(name))
                 return;
 
             try
             {
-                // Giả định PersonManager có phương thức này
                 bool deleted = _personMgr.DeletePersonByName(name);
                 if (deleted)
                 {
@@ -61,7 +52,6 @@ namespace FaceRecoSystem.controls
             }
         }
 
-        // --- Logic cho Tab 2: Xóa bằng Khuôn mặt ---
 
         private void BtnStartScan_Click(object sender, EventArgs e)
         {
@@ -80,8 +70,7 @@ namespace FaceRecoSystem.controls
             try
             {
                 _capture = new VideoCapture(0);
-                Application.Idle += ProcessFrame; // Gắn sự kiện để xử lý mỗi khung hình
-                btnStartScan.Text = "Dừng quét";
+                Application.Idle += ProcessFrame; btnStartScan.Text = "Dừng quét";
                 lblScanStatus.Text = "Trạng thái: Đang quét...";
                 btnDeleteByFace.Enabled = false;
                 _isScanning = true;
@@ -113,15 +102,11 @@ namespace FaceRecoSystem.controls
             {
                 if (frame != null)
                 {
-                    // Giả định PersonManager có phương thức RecognizeFace trả về tên hoặc null
-                    // Bạn cần tự triển khai phương thức này
-                    //_recognizedName = _personMgr.RecognizeFace(frame);
 
                     if (!string.IsNullOrEmpty(_recognizedName))
                     {
                         lblScanStatus.Text = $"Đã nhận diện: {_recognizedName}";
                         btnDeleteByFace.Enabled = true;
-                        // (Tùy chọn) Vẽ một hình chữ nhật quanh khuôn mặt được nhận dạng
                     }
                     else
                     {
@@ -129,7 +114,6 @@ namespace FaceRecoSystem.controls
                         btnDeleteByFace.Enabled = false;
                     }
 
-                    // Hiển thị khung hình lên PictureBox
                     picCamera.Image = frame.ToBitmap();
                 }
             }
@@ -138,20 +122,13 @@ namespace FaceRecoSystem.controls
         private void BtnDeleteByFace_Click(object sender, EventArgs e)
         {
             if (string.IsNullOrEmpty(_recognizedName)) return;
-
-            var confirm = MessageBox.Show(
-                $"Bạn có chắc chắn muốn xóa '{_recognizedName}' không? Hành động này không thể hoàn tác.",
-                "Xác nhận xóa",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
-
-            if (confirm == DialogResult.Yes)
+            if (!ConfirmDeletion(_recognizedName))
             {
                 try
                 {
                     _personMgr.DeletePersonByName(_recognizedName);
                     MessageBox.Show($"Đã xóa '{_recognizedName}' thành công.", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    StopScanning(); // Dừng và reset sau khi xóa
+                    StopScanning();
                 }
                 catch (Exception ex)
                 {
@@ -160,18 +137,25 @@ namespace FaceRecoSystem.controls
             }
         }
 
-        // Dọn dẹp tài nguyên khi control bị hủy
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                StopScanning(); // Đảm bảo camera được giải phóng
-                if (components != null)
+                StopScanning(); if (components != null)
                 {
                     components.Dispose();
                 }
             }
             base.Dispose(disposing);
+        }
+        private bool ConfirmDeletion(string personName)
+        {
+            var result = MessageBox.Show(
+                $"Bạn có chắc chắn muốn xóa '{personName}' không? Hành động này không thể hoàn tác.",
+                "Xác nhận xóa",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+            return result == DialogResult.Yes;
         }
     }
 }

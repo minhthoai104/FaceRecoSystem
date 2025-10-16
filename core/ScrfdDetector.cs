@@ -14,7 +14,6 @@ namespace FaceRecoSystem
         private readonly float _confThreshold = 0.5f;
         private readonly float _nmsThreshold = 0.4f;
 
-        // Strides và anchors
         private readonly int[] _strides = { 8, 16, 32, 64, 128 };
         private const int NumAnchors = 2;
         private readonly Dictionary<int, List<Point>> _anchorCenters = new();
@@ -43,7 +42,6 @@ namespace FaceRecoSystem
             }
         }
 
-        // Helper in thông tin Mat
         private void PrintMatInfo(Mat m, string name)
         {
             try
@@ -56,27 +54,21 @@ namespace FaceRecoSystem
             }
         }
 
-        // Helper để lấy phần tử float an toàn (nhiều dạng shape)
         private float SafeGetFloat(Mat m, int flatIndex, int fallbackIndex = 0)
         {
-            // Nếu m.Total() nhỏ hơn flatIndex+1 trả về 0
             if (m == null || m.Empty() || m.Total() == 0) return 0f;
             long total = m.Total();
             if (flatIndex < 0) flatIndex = 0;
             if (flatIndex >= total) flatIndex = Math.Min((int)total - 1, fallbackIndex);
 
-            // Thử đọc theo nhiều cách
             try
             {
-                // Nếu mat có 1 row, nhiều cols -> At<float>(0, idx)
                 if (m.Rows == 1 && m.Cols >= 1)
                     return m.At<float>(0, flatIndex);
 
-                // Nếu mat có shape (N,1) -> At<float>(flatIndex, 0)
                 if (m.Cols == 1 && m.Rows >= 1)
                     return m.At<float>(flatIndex, 0);
 
-                // Nếu mat dạng 1xCx1x1 hoặc 1xN -> try At with 3 indexes
                 if (m.Dims >= 2)
                 {
                     try
@@ -86,7 +78,6 @@ namespace FaceRecoSystem
                     catch { }
                 }
 
-                // Fallback: try index as linear using Mat.GetArray (not always available) -> try At<float>(0,0) as safe fallback
                 return m.At<float>(0, 0);
             }
             catch
@@ -106,7 +97,6 @@ namespace FaceRecoSystem
                     new Scalar(104, 117, 123), swapRB: false, crop: false);
                 _net.SetInput(blob);
 
-                // Lấy tên các output thực tế từ model (không dùng hardcode)
                 var outNames = _net.GetUnconnectedOutLayersNames();
                 Console.WriteLine("[SCRFD] model outputs count: " + outNames.Length);
                 for (int i = 0; i < outNames.Length; i++)
@@ -118,7 +108,6 @@ namespace FaceRecoSystem
                 {
                     try
                     {
-                        // Forward bằng tên layer trả về một Mat
                         Mat outMat = _net.Forward(outNames[i]);
                         outputsList.Add(outMat);
                         Console.WriteLine($"[SCRFD] Forwarded out[{i}] = {outNames[i]} -> mat added.");
@@ -126,29 +115,22 @@ namespace FaceRecoSystem
                     catch (Exception ex)
                     {
                         Console.WriteLine($"[SCRFD] Forward fail for {outNames[i]}: {ex.Message}");
-                        // Thêm mat rỗng để giữ đúng thứ tự nếu cần
                         outputsList.Add(new Mat());
                     }
                 }
 
-                // In thông tin output để debug
                 for (int i = 0; i < outputs.Length; i++)
                     PrintMatInfo(outputs[i], outNames[i]);
 
-                // Kiểm tra số anchors dự kiến
                 int expectedAnchors = _anchorCenters.Sum(kvp => kvp.Value.Count);
                 Console.WriteLine($"[SCRFD] expected anchors total = {expectedAnchors}");
 
-                // Tập hợp boxes/conf
                 var allBoxes = new List<Rect>();
                 var allConf = new List<float>();
 
-                // Scale về ảnh gốc
                 float scaleX = (float)frame.Width / _inputWidth;
                 float scaleY = (float)frame.Height / _inputHeight;
 
-                // Thử ghép outputs theo cặp: (score, bbox) theo thứ tự output list.
-                // Nếu model khác order, bạn sẽ thấy mismatch trong logs trên.
                 int outIdx = 0;
                 foreach (var stride in _strides)
                 {
@@ -168,13 +150,11 @@ namespace FaceRecoSystem
                     int anchorsCount = anchorCenters.Count;
                     Console.WriteLine($"[SCRFD] stride {stride} anchorsCount={anchorsCount}, scoreMat.total={scoreMat.Total()}, bboxMat.total={bboxMat.Total()}");
 
-                    // Nếu số phần tử score không khớp anchorsCount thì in cảnh báo
                     if (scoreMat.Total() < anchorsCount || bboxMat.Total() < anchorsCount * 4)
                     {
                         Console.WriteLine($"[SCRFD] WARNING: mismatch sizes at stride {stride}. scoreMat.Total={scoreMat.Total()} bboxMat.Total={bboxMat.Total()} expected anchors*4={anchorsCount * 4}");
                     }
 
-                    // Duyệt anchors (an toàn: dùng min để tránh OOB)
                     int loopCount = Math.Min(anchorsCount, (int)scoreMat.Total());
                     for (int i = 0; i < loopCount; i++)
                     {
@@ -183,11 +163,9 @@ namespace FaceRecoSystem
 
                         var anchor = anchorCenters[i];
 
-                        // Tùy shape bboxMat, đọc 4 giá trị liên tiếp nếu có linear layout, hoặc (i,0..3)
                         float dx = 0, dy = 0, dw = 0, dh = 0;
                         try
                         {
-                            // cố gắng đọc theo cách phổ biến nhất: bboxMat.At<float>(0, i*4 + k) or At<float>(0, i, k)
                             if (bboxMat.Rows == 1 && bboxMat.Cols >= (i * 4 + 4))
                             {
                                 dx = bboxMat.At<float>(0, i * 4 + 0) * stride;
@@ -195,7 +173,7 @@ namespace FaceRecoSystem
                                 dw = (float)Math.Exp(bboxMat.At<float>(0, i * 4 + 2)) * stride;
                                 dh = (float)Math.Exp(bboxMat.At<float>(0, i * 4 + 3)) * stride;
                             }
-                            else if (bboxMat.Channels() >= 4 && bboxMat.Total() >= anchorsCount) // maybe shape N x 4
+                            else if (bboxMat.Channels() >= 4 && bboxMat.Total() >= anchorsCount)
                             {
                                 dx = bboxMat.At<float>(i, 0) * stride;
                                 dy = bboxMat.At<float>(i, 1) * stride;
@@ -204,7 +182,6 @@ namespace FaceRecoSystem
                             }
                             else
                             {
-                                // fallback đọc tuyến tính
                                 dx = SafeGetFloat(bboxMat, i * 4 + 0) * stride;
                                 dy = SafeGetFloat(bboxMat, i * 4 + 1) * stride;
                                 dw = (float)Math.Exp(SafeGetFloat(bboxMat, i * 4 + 2)) * stride;
@@ -230,7 +207,6 @@ namespace FaceRecoSystem
                     }
                 }
 
-                // Giải phóng outputs
                 foreach (var m in outputs) m?.Dispose();
 
                 if (allBoxes.Count == 0) return Array.Empty<Rect>();

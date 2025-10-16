@@ -5,52 +5,60 @@ using System.Linq;
 
 namespace FaceRecoSystem
 {
-    internal class Recognizer
+    public class Recognizer
     {
-        private readonly IReadOnlyDictionary<string, List<FaceEncoding>> _db;
+        private readonly IReadOnlyDictionary<string, List<double[]>> _known;
         private readonly double _tolerance;
 
-        public Recognizer(IReadOnlyDictionary<string, List<FaceEncoding>> db, double tolerance = 0.4)
+        public Recognizer(IReadOnlyDictionary<string, List<double[]>> known, double tolerance = 0.45)
         {
-            _db = db;
+            _known = known ?? new Dictionary<string, List<double[]>>();
             _tolerance = tolerance;
         }
 
-        public (string name, double confidence) Recognize(FaceEncoding unknownEncoding)
+        public (string name, double confidence) Recognize(FaceEncoding encoding)
         {
-            if (!_db.Any() || unknownEncoding == null)
-            {
+            if (encoding == null || _known.Count == 0)
                 return ("Unknown", 0);
-            }
 
-            string bestMatchName = "Unknown";
-            double bestMatchDistance = double.MaxValue;
+            double[] targetEnc = encoding.GetRawEncoding();
+            string bestName = "Unknown";
+            double bestDistance = double.MaxValue;
 
-            foreach (var personEntry in _db)
+            foreach (var kvp in _known)
             {
-                string personName = personEntry.Key;
-                List<FaceEncoding> knownEncodings = personEntry.Value;
-
-                double distance = knownEncodings
-                    .Select(knownEnc => FaceRecognition.FaceDistance(knownEnc, unknownEncoding))
-                    .Min();
-
-                if (distance < bestMatchDistance)
+                foreach (var knownEnc in kvp.Value)
                 {
-                    bestMatchDistance = distance;
-                    bestMatchName = personName;
+                    double dist = ComputeFaceDistance(knownEnc, targetEnc);
+                    if (dist < bestDistance)
+                    {
+                        bestDistance = dist;
+                        bestName = kvp.Key;
+                    }
                 }
             }
-            
-            if (bestMatchDistance <= _tolerance)
+
+            if (bestDistance < _tolerance)
             {
-                double normalizedDistance = bestMatchDistance / _tolerance;
-                double confidence = (1.0 - Math.Pow(normalizedDistance, 4)) * 100.0;
-                
-                return (bestMatchName, confidence);
+                double confidence = (1.0 - bestDistance) * 100.0;
+                return (bestName, Math.Round(confidence, 2));
             }
 
             return ("Unknown", 0);
+        }
+
+        private static double ComputeFaceDistance(double[] enc1, double[] enc2)
+        {
+            if (enc1 == null || enc2 == null || enc1.Length != enc2.Length)
+                return double.MaxValue;
+
+            double sum = 0;
+            for (int i = 0; i < enc1.Length; i++)
+            {
+                double diff = enc1[i] - enc2[i];
+                sum += diff * diff;
+            }
+            return Math.Sqrt(sum / enc1.Length);
         }
     }
 }

@@ -9,10 +9,11 @@ namespace FaceRecoSystem
         public int Age { get; set; }
         public string Gender { get; set; }
         public string Address { get; set; }
+        public bool IsActive { get; set; } = true;
 
-        public string FaceFrontPath { get; set; }
-        public string FaceLeftPath { get; set; }
-        public string FaceRightPath { get; set; }
+        public byte[] FaceFront { get; set; }
+        public byte[] FaceLeft { get; set; }
+        public byte[] FaceRight { get; set; }
 
         public byte[] FaceFrontEncoding { get; set; }
         public byte[] FaceLeftEncoding { get; set; }

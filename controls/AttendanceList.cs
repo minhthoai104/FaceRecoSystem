@@ -1,5 +1,4 @@
-﻿using FaceRecoSystem.core;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -8,22 +7,21 @@ using System.Windows.Forms;
 
 namespace FaceRecoSystem.controls
 {
-    public partial class PersonListControl : UserControl
+    public partial class AttendanceList : UserControl
     {
         private readonly FaceDatabase _db;
-        private readonly PersonManager _personManager;
 
-        public PersonListControl(FaceDatabase db)
+        public AttendanceList(FaceDatabase db)
         {
             InitializeComponent();
             _db = db;
         }
 
-        public PersonListControl()
+        public AttendanceList()
         {
         }
 
-        private void PersonListControl_Load(object sender, EventArgs e)
+        private void AttendanceList_Load(object sender, EventArgs e)
         {
             LoadPersonList();
         }
@@ -49,7 +47,7 @@ namespace FaceRecoSystem.controls
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error loading person list: {ex.Message}", "Error",
+                MessageBox.Show($"Error loading attendance list: {ex.Message}", "Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }

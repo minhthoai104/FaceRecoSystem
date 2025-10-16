@@ -33,27 +33,23 @@ namespace FaceRecoSystem
 
         private void InitializeFaceSystem()
         {
-            // use the app base models folder (assumes models placed next to exe in "models")
             string modelDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "models");
 
             if (!Directory.Exists(modelDir))
             {
-                MessageBox.Show($"❌ Không tìm thấy thư mục models.\nĐường dẫn đã kiểm tra: {modelDir}",
+                MessageBox.Show($"Không tìm thấy thư mục models.\nĐường dẫn đã kiểm tra: {modelDir}",
                                 "Lỗi Model", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
             try
             {
-                // Create FaceRecognition (dlib) -- argument is models folder
                 _fr = FaceRecognition.Create(modelDir);
                 Thread.Sleep(200);
 
-                _db = new FaceDatabase(_fr, Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "faces_db"), DatabaseHelper.ConnectionString);
-                _camService = new CameraService(_fr, _db); // optional: if used elsewhere
-                _personMgr = new PersonManager(_fr, _db);
+                _db = new FaceDatabase(_fr, DatabaseHelper.ConnectionString);
+                _camService = new CameraService(_fr, _db); _personMgr = new PersonManager(_fr, _db);
 
-                // camera view setup (if you want to show raw camera elsewhere)
                 _cameraView = new PictureBox
                 {
                     Dock = DockStyle.Fill,
@@ -65,13 +61,13 @@ namespace FaceRecoSystem
             }
             catch (AccessViolationException)
             {
-                MessageBox.Show("💥 Lỗi AccessViolationException — Dlib bị treo!\n" +
+                MessageBox.Show("Lỗi AccessViolationException — Dlib bị treo!\n" +
                                 "Vui lòng kiểm tra lại file model .dat hoặc đảm bảo dự án đang chạy ở chế độ x64.",
                                 "Lỗi Dlib", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"💥 Lỗi không xác định khi khởi tạo hệ thống:\n{ex.Message}",
+                MessageBox.Show($"Lỗi không xác định khi khởi tạo hệ thống:\n{ex.Message}",
                                 "Lỗi Hệ thống", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -146,8 +142,8 @@ namespace FaceRecoSystem
                     page = new AttendanceControl(_fr, _db);
                     break;
 
-                case "btnViewList":
-                    page = new PersonListControl();
+                case "btnViewAttendanceList":
+                    page = new AttendanceList();
                     break;
 
                 case "btnAddPerson":
@@ -160,6 +156,9 @@ namespace FaceRecoSystem
 
                 case "btnDeletePerson":
                     page = new DeletePersonControl(_personMgr);
+                    break;
+                case "btnViewEmpList":
+                    page = new PersonListControl();
                     break;
             }
 

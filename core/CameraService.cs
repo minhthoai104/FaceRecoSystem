@@ -98,7 +98,6 @@ namespace FaceRecoSystem
             {
                 try
                 {
-                    // Thêm lock để đảm bảo capture không bị dispose khi đang Read
                     lock (_lock)
                     {
                         if (_capture == null || _capture.IsDisposed) break;
@@ -143,7 +142,6 @@ namespace FaceRecoSystem
             _running = false;
             _cameraThread?.Join(200);
 
-            // Thêm lock để tránh xung đột thread khi dispose
             lock (_lock)
             {
                 _capture?.Release();
@@ -212,7 +210,7 @@ namespace FaceRecoSystem
                 }
 
                 Cv2.ImShow("Camera", frame);
-                if (Cv2.WaitKey(1) == 27) break; // ESC thoát
+                if (Cv2.WaitKey(1) == 27) break;
             }
 
             Cv2.DestroyAllWindows();

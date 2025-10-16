@@ -12,7 +12,8 @@ namespace FaceRecoSystem
         private Button btnAddPerson;
         private Button btnUpdatePerson;
         private Button btnDeletePerson;
-        private Button btnViewList;
+        private Button btnViewAttendanceList;
+        private Button btnViewEmpList;
         private Label lblTitle;
 
         protected override void Dispose(bool disposing)
@@ -28,9 +29,10 @@ namespace FaceRecoSystem
             this.btnDeletePerson = new System.Windows.Forms.Button();
             this.btnUpdatePerson = new System.Windows.Forms.Button();
             this.btnAddPerson = new System.Windows.Forms.Button();
-            this.btnViewList = new System.Windows.Forms.Button();
+            this.btnViewAttendanceList = new System.Windows.Forms.Button();
             this.btnAttendance = new System.Windows.Forms.Button();
             this.lblTitle = new System.Windows.Forms.Label();
+            this.btnViewEmpList = new System.Windows.Forms.Button();
             this.panelMain = new System.Windows.Forms.Panel();
             this.panelMenu.SuspendLayout();
             this.SuspendLayout();
@@ -38,10 +40,11 @@ namespace FaceRecoSystem
             // panelMenu
             // 
             this.panelMenu.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(63)))), ((int)(((byte)(114)))), ((int)(((byte)(175)))));
+            this.panelMenu.Controls.Add(this.btnViewEmpList);
             this.panelMenu.Controls.Add(this.btnDeletePerson);
             this.panelMenu.Controls.Add(this.btnUpdatePerson);
             this.panelMenu.Controls.Add(this.btnAddPerson);
-            this.panelMenu.Controls.Add(this.btnViewList);
+            this.panelMenu.Controls.Add(this.btnViewAttendanceList);
             this.panelMenu.Controls.Add(this.btnAttendance);
             this.panelMenu.Controls.Add(this.lblTitle);
             this.panelMenu.Dock = System.Windows.Forms.DockStyle.Left;
@@ -49,6 +52,10 @@ namespace FaceRecoSystem
             this.panelMenu.Name = "panelMenu";
             this.panelMenu.Size = new System.Drawing.Size(224, 700);
             this.panelMenu.TabIndex = 0;
+            // 
+            // button1
+            // 
+
             // 
             // btnDeletePerson
             // 
@@ -89,18 +96,18 @@ namespace FaceRecoSystem
             this.btnAddPerson.TabIndex = 4;
             this.btnAddPerson.Text = "➕ Thêm nhân viên";
             // 
-            // btnViewList
+            // btnViewAttendanceList
             // 
-            this.btnViewList.Dock = System.Windows.Forms.DockStyle.Top;
-            this.btnViewList.FlatAppearance.BorderSize = 0;
-            this.btnViewList.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnViewList.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
-            this.btnViewList.ForeColor = System.Drawing.Color.White;
-            this.btnViewList.Location = new System.Drawing.Point(0, 120);
-            this.btnViewList.Name = "btnViewList";
-            this.btnViewList.Size = new System.Drawing.Size(224, 60);
-            this.btnViewList.TabIndex = 0;
-            this.btnViewList.Text = "📋 Danh sách chấm công";
+            this.btnViewAttendanceList.Dock = System.Windows.Forms.DockStyle.Top;
+            this.btnViewAttendanceList.FlatAppearance.BorderSize = 0;
+            this.btnViewAttendanceList.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnViewAttendanceList.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
+            this.btnViewAttendanceList.ForeColor = System.Drawing.Color.White;
+            this.btnViewAttendanceList.Location = new System.Drawing.Point(0, 120);
+            this.btnViewAttendanceList.Name = "btnViewAttendanceList";
+            this.btnViewAttendanceList.Size = new System.Drawing.Size(224, 60);
+            this.btnViewAttendanceList.TabIndex = 0;
+            this.btnViewAttendanceList.Text = "📋 Danh sách chấm công";
             // 
             // btnAttendance
             // 
@@ -126,6 +133,20 @@ namespace FaceRecoSystem
             this.lblTitle.TabIndex = 5;
             this.lblTitle.Text = "HỆ THỐNG NHẬN DIỆN";
             this.lblTitle.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            // 
+            // btnViewEmpList
+            // 
+            this.btnViewEmpList.Location = new System.Drawing.Point(0, 0);
+            this.btnViewEmpList.TabIndex = 0;
+            this.btnViewEmpList.Dock = System.Windows.Forms.DockStyle.Top;
+            this.btnViewEmpList.FlatAppearance.BorderSize = 0;
+            this.btnViewEmpList.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnViewEmpList.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
+            this.btnViewEmpList.ForeColor = System.Drawing.Color.White;
+            this.btnViewEmpList.Name = "btnViewEmpList";
+            this.btnViewEmpList.Size = new System.Drawing.Size(224, 60);
+            //this.btnViewEmpList.TabIndex = 6;
+            this.btnViewEmpList.Text = "📋 Danh sách nhân viên";
             // 
             // panelMain
             // 

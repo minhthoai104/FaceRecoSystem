@@ -29,22 +29,16 @@ namespace FaceRecoSystem
             if (faceFrame == null || faceFrame.Empty())
                 return true;
 
-            // --- 1️⃣ Anti-spoof bằng ONNX model ---
             bool modelLive = PredictAntiSpoof(faceFrame);
 
-            // --- 2️⃣ Liveness truyền thống (chuyển động, ánh sáng, texture) ---
             bool motionLive = AnalyzeFrameMotion(faceFrame);
 
-            // --- 3️⃣ Tổng hợp kết quả ---
             _isLive = modelLive && motionLive;
 
             Console.WriteLine($"[Liveness] Model={(modelLive ? "LIVE" : "FAKE")}, Motion={(motionLive ? "LIVE" : "FAKE")} => FINAL={(_isLive ? "LIVE ✅" : "FAKE ❌")}");
             return _isLive;
         }
 
-        // =====================
-        // 🔹 Phần 1: Anti-spoof model
-        // =====================
         private bool PredictAntiSpoof(Mat faceFrame)
         {
             try
@@ -76,11 +70,9 @@ namespace FaceRecoSystem
                 float realScore = output[1];
                 float fakeScore = output[0];
 
-                // ✅ cải thiện ngưỡng & ổn định
                 double confidence = realScore / (realScore + fakeScore + 1e-6);
                 bool isLive = confidence > 0.65 && realScore > fakeScore * 1.1;
 
-                // Làm mượt kết quả qua EMA
                 _avgMotion = 0.8 * _avgMotion + 0.2 * (isLive ? 1 : 0);
                 bool smoothedLive = _avgMotion > 0.5;
 
@@ -95,9 +87,6 @@ namespace FaceRecoSystem
         }
 
 
-        // =====================
-        // 🔹 Phần 2: Liveness motion
-        // =====================
         private bool AnalyzeFrameMotion(Mat frame)
         {
             try

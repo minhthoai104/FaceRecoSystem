@@ -52,7 +52,6 @@ namespace FaceRecoSystem
                 double variance = outArr.Select(v => Math.Pow(v - mean, 2)).Average();
                 double stddev = Math.Sqrt(variance);
 
-                // lấy phần đầu (ví dụ 1/8) để ước lượng background mean - giúp phân biệt ảnh phẳng
                 int bgCount = Math.Max(1, outArr.Length / 8);
                 double bgMean = outArr.Take(bgCount).Average();
                 double relMean = Math.Abs(mean - bgMean);

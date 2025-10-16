@@ -9,8 +9,8 @@ namespace FaceRecoSystem
 {
     internal class EyeBlinkDetector
     {
-        private const double EyeARThreshold = 0.22; // ngưỡng nhắm mắt
-        private const int EyeARConsecutiveFrames = 2; // số frame nhắm liên tiếp
+        private const double EyeARThreshold = 0.22;
+        private const int EyeARConsecutiveFrames = 2;
 
         private int _counter = 0;
 
@@ -32,14 +32,10 @@ namespace FaceRecoSystem
             return Math.Sqrt(Math.Pow(p1.X - p2.X, 2) + Math.Pow(p1.Y - p2.Y, 2));
         }
 
-        /// <summary>
-        /// Phát hiện chớp mắt từ các điểm mốc khuôn mặt (landmarks)
-        /// </summary>
         public bool Detect(IDictionary<FacePart, IEnumerable<FaceRecognitionDotNet.Point>> landmarks)
         {
             try
             {
-                // Lấy mốc mắt trái/phải và chuyển sang kiểu OpenCV Point
                 var leftEye = landmarks[FacePart.LeftEye]
                     .Select(p => new CvPoint((int)p.X, (int)p.Y));
                 var rightEye = landmarks[FacePart.RightEye]
@@ -58,7 +54,7 @@ namespace FaceRecoSystem
                     if (_counter >= EyeARConsecutiveFrames)
                     {
                         _counter = 0;
-                        return true; // 👁️ chớp mắt hoàn tất
+                        return true;
                     }
                     _counter = 0;
                 }

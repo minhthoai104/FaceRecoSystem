@@ -1,4 +1,7 @@
-﻿using System;
+﻿using FaceRecoSystem.core;
+using OpenCvSharp;
+using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -8,7 +11,7 @@ namespace FaceRecoSystem.controls
     public partial class AddPersonControl : UserControl
     {
         private readonly PersonManager _personMgr;
-        private string[] _capturedImagePaths;
+        private List<Mat> _capturedImagePaths;
         public AddPersonControl(PersonManager personMgr)
         {
             InitializeComponent();
@@ -23,11 +26,7 @@ namespace FaceRecoSystem.controls
         }
         private void SetupLayout()
         {
-            // Xóa hết các control cũ để dựng lại từ đầu
             this.Controls.Clear();
-            //this.BackColor = Color.FromArgb(245, 245, 245);
-
-            // ===== 1. Bố cục chính để CĂN GIỮA toàn bộ nội dung =====
             var mainCenteringLayout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -39,20 +38,16 @@ namespace FaceRecoSystem.controls
             mainCenteringLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             mainCenteringLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
             this.Controls.Add(mainCenteringLayout);
-
-            // ===== 2. Panel chính chứa TOÀN BỘ nội dung =====
             var contentPanel = new FlowLayoutPanel
             {
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 AutoSize = true,
-                MaximumSize = new Size(800, 0),
+                MaximumSize = new System.Drawing.Size(800, 0),
                 Padding = new Padding(20),
                 BackColor = Color.White
             };
             mainCenteringLayout.Controls.Add(contentPanel, 1, 0);
-
-            // ===== 3. Tiêu đề chính =====
             lblTitle = new Label
             {
                 Text = "THÊM NHÂN VIÊN MỚI",
@@ -65,41 +60,33 @@ namespace FaceRecoSystem.controls
                 Margin = new Padding(0, 10, 0, 30),
             };
             contentPanel.Controls.Add(lblTitle);
-
-
-            // ===== 4. Vùng nhập thông tin cá nhân =====
             var infoGrid = new TableLayoutPanel
             {
                 ColumnCount = 2,
                 RowCount = 4,
-                // *** THAY ĐỔI CUỐI CÙNG: Dùng AutoSize và MinimumSize ***
-                AutoSize = true,                  // Cho phép tự tính chiều cao
-                MinimumSize = new Size(660, 0),   // Nhưng chiều ngang không được co lại
+                AutoSize = true,
+                MinimumSize = new System.Drawing.Size(660, 0),
                 Margin = new Padding(50, 0, 50, 0)
             };
             infoGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F));
             infoGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
-            // -- Dòng 1: Họ và tên --
             lblName = new Label { Text = "Họ và tên:", Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
             txtName = new TextBox { Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(5, 5, 0, 10) };
             infoGrid.Controls.Add(lblName, 0, 0);
             infoGrid.Controls.Add(txtName, 1, 0);
 
-            // -- Dòng 2: Tuổi --
             lblAge = new Label { Text = "Tuổi:", Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
             txtAge = new TextBox { Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(5, 5, 0, 10) };
             infoGrid.Controls.Add(lblAge, 0, 1);
             infoGrid.Controls.Add(txtAge, 1, 1);
             txtAge.TextChanged += TxtAge_TextChanged;
-            // -- Dòng 3: Giới tính --
             lblGender = new Label { Text = "Giới tính:", Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
             cbGender = new ComboBox { Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left | AnchorStyles.Right, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(5, 5, 0, 10) };
             cbGender.Items.AddRange(new object[] { "Nam", "Nữ", "Khác" });
             infoGrid.Controls.Add(lblGender, 0, 2);
             infoGrid.Controls.Add(cbGender, 1, 2);
 
-            // -- Dòng 4: Địa chỉ --
             lblAddress = new Label { Text = "Địa chỉ:", Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
             txtAddress = new TextBox { Font = new Font("Segoe UI", 12), Dock = DockStyle.Fill, Multiline = true, Height = 90, Margin = new Padding(5, 5, 0, 10) };
             infoGrid.Controls.Add(lblAddress, 0, 3);
@@ -107,7 +94,6 @@ namespace FaceRecoSystem.controls
 
             contentPanel.Controls.Add(infoGrid);
 
-            // ===== 5. Vùng ảnh khuôn mặt =====
             var faceSectionHeader = new TableLayoutPanel
             {
                 ColumnCount = 2,
@@ -134,7 +120,7 @@ namespace FaceRecoSystem.controls
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
-                Size = new Size(200, 40),
+                Size = new System.Drawing.Size(200, 40),
                 Anchor = AnchorStyles.Right
             };
             btnStartCapture.FlatAppearance.BorderSize = 0;
@@ -145,7 +131,6 @@ namespace FaceRecoSystem.controls
 
             contentPanel.Controls.Add(faceSectionHeader);
 
-            // -- Vùng chứa 3 ảnh --
             var picturesPanel = new FlowLayoutPanel
             {
                 AutoSize = true,
@@ -177,14 +162,14 @@ namespace FaceRecoSystem.controls
                 var card = new FlowLayoutPanel
                 {
                     FlowDirection = FlowDirection.TopDown,
-                    Size = new Size(200, 230),
+                    Size = new System.Drawing.Size(200, 230),
                     Margin = new Padding(10),
                     BackColor = Color.White,
                     Padding = new Padding(5)
                 };
 
                 var pic = faces[index].pic;
-                pic.Size = new Size(180, 180);
+                pic.Size = new System.Drawing.Size(180, 180);
                 pic.Margin = new Padding(10, 0, 10, 0);
                 pic.BorderStyle = BorderStyle.FixedSingle;
                 pic.SizeMode = PictureBoxSizeMode.Zoom;
@@ -202,14 +187,14 @@ namespace FaceRecoSystem.controls
                     Text = "❌",
                     BackColor = Color.FromArgb(220, 50, 50),
                     ForeColor = Color.White,
-                    Size = new Size(28, 28),
+                    Size = new System.Drawing.Size(28, 28),
                     FlatStyle = FlatStyle.Flat
                 };
                 btnDelete.FlatAppearance.BorderSize = 0;
 
                 var picPanel = new Panel
                 {
-                    Size = new Size(180, 180),
+                    Size = new System.Drawing.Size(180, 180),
                     Margin = new Padding(0),
                     Padding = new Padding(0)
                 };
@@ -217,7 +202,7 @@ namespace FaceRecoSystem.controls
                 picPanel.Controls.Add(pic);
                 picPanel.Controls.Add(btnDelete);
 
-                btnDelete.Location = new Point(picPanel.Width - btnDelete.Width - 4, 4);
+                btnDelete.Location = new System.Drawing.Point(picPanel.Width - btnDelete.Width - 4, 4);
                 btnDelete.Anchor = AnchorStyles.Top | AnchorStyles.Right;
                 btnDelete.BringToFront();
 
@@ -277,7 +262,6 @@ namespace FaceRecoSystem.controls
             }
             contentPanel.Controls.Add(picturesPanel);
 
-            // ===== 6. Nút LƯU cuối cùng =====
             btnSave = new Button
             {
                 Text = "💾 Lưu thông tin",
@@ -285,7 +269,7 @@ namespace FaceRecoSystem.controls
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 12, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
-                Size = new Size(200, 45),
+                Size = new System.Drawing.Size(200, 45),
                 Margin = new Padding(0, 30, 0, 20)
             };
             btnSave.FlatAppearance.BorderSize = 0;
@@ -298,13 +282,11 @@ namespace FaceRecoSystem.controls
             contentPanel.Controls.Add(saveButtonPanel);
         }
 
-
-
         private PictureBox CreateFaceBox()
         {
             return new PictureBox
             {
-                Size = new Size(150, 150),
+                Size = new System.Drawing.Size(150, 150),
                 BorderStyle = BorderStyle.FixedSingle,
                 SizeMode = PictureBoxSizeMode.Zoom,
                 BackColor = Color.WhiteSmoke
@@ -322,59 +304,26 @@ namespace FaceRecoSystem.controls
             };
         }
 
-        private Button CreateDeleteButton(PictureBox targetPic)
-        {
-            var btn = new Button
-            {
-                Text = "❌",
-                BackColor = Color.LightGray,
-                Size = new Size(30, 30),
-                FlatStyle = FlatStyle.Flat
-            };
-            btn.Click += (s, e) =>
-            {
-                targetPic.Image?.Dispose();
-                targetPic.Image = null;
-            };
-            return btn;
-        }
-
         private void btnStartCapture_Click(object sender, EventArgs e)
         {
-            if (txtName == null || txtAge == null || txtAddress == null || cbGender == null)
-            {
-                MessageBox.Show("Các control chưa được khởi tạo!");
-                return;
-            }
-            if (_personMgr == null)
-            {
-                MessageBox.Show("_personMgr chưa được khởi tạo!");
-                return;
-            }
-            if (picFront == null || picLeft == null || picRight == null)
-            {
-                MessageBox.Show("Các PictureBox chưa được khởi tạo!");
-                return;
-            }
-
             string name = txtName.Text.Trim();
-            int.TryParse(txtAge.Text, out int age);
-            string gender = cbGender.Text;
-            string address = txtAddress.Text;
-
             if (string.IsNullOrEmpty(name))
             {
                 MessageBox.Show("Vui lòng nhập họ tên!", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            _capturedImagePaths = _personMgr.CaptureFacesOnly(name, age, gender, address, true);
+            _capturedImagePaths = _personMgr.CaptureThreeAngles(name);
 
-            if (_capturedImagePaths != null && _capturedImagePaths.Length == 3)
+            if (_capturedImagePaths != null && _capturedImagePaths.Count == 3)
             {
-                picFront.Image = Image.FromFile(_capturedImagePaths[0]);
-                picLeft.Image = Image.FromFile(_capturedImagePaths[1]);
-                picRight.Image = Image.FromFile(_capturedImagePaths[2]);
+                picFront.Image?.Dispose();
+                picLeft.Image?.Dispose();
+                picRight.Image?.Dispose();
+
+                picFront.Image = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(_capturedImagePaths[0]);
+                picLeft.Image = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(_capturedImagePaths[1]);
+                picRight.Image = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(_capturedImagePaths[2]);
             }
         }
 
@@ -385,34 +334,22 @@ namespace FaceRecoSystem.controls
             string gender = cbGender.Text;
             string address = txtAddress.Text.Trim();
 
-            // === BẮT ĐẦU KHỐI LỆNH KIỂM TRA TUỔI ===
-
-            // 1. Kiểm tra xem người dùng có nhập đúng là số không
             if (!int.TryParse(txtAge.Text, out int age))
             {
-                MessageBox.Show("Vui lòng nhập tuổi là một con số hợp lệ!",
-                                "Lỗi Dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return; // Dừng lại, không thực hiện tiếp
+                MessageBox.Show("Vui lòng nhập tuổi là một con số hợp lệ!", "Lỗi Dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
             }
-
-            // 2. Nếu đúng là số, kiểm tra khoảng giá trị (16-60)
             if (age < 16 || age > 60)
             {
-                MessageBox.Show("Tuổi của nhân viên phải nằm trong khoảng từ 16 đến 60.",
-                                "Tuổi không hợp lệ", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return; // Dừng lại, không thực hiện tiếp
+                MessageBox.Show("Tuổi của nhân viên phải từ 16 đến 60.", "Tuổi không hợp lệ", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
             }
-
-            // === KẾT THÚC KHỐI LỆNH KIỂM TRA TUỔI ===
-
-            // Kiểm tra các thông tin bắt buộc khác
             if (string.IsNullOrWhiteSpace(name))
             {
                 MessageBox.Show("Vui lòng nhập họ tên!", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-
-            if (_capturedImagePaths == null || _capturedImagePaths.Length < 3)
+            if (_capturedImagePaths == null || _capturedImagePaths.Count < 3)
             {
                 MessageBox.Show("Vui lòng chụp đủ 3 góc khuôn mặt trước khi lưu!", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -420,10 +357,8 @@ namespace FaceRecoSystem.controls
 
             try
             {
-                // 1️⃣ Sinh mã nhân viên
                 string userId = GenerateUserID();
 
-                // 2️⃣ Lấy vector khuôn mặt
                 byte[] frontVec = _personMgr.GetFaceEncodingAsBytes(_capturedImagePaths[0]);
                 byte[] leftVec = _personMgr.GetFaceEncodingAsBytes(_capturedImagePaths[1]);
                 byte[] rightVec = _personMgr.GetFaceEncodingAsBytes(_capturedImagePaths[2]);
@@ -434,24 +369,62 @@ namespace FaceRecoSystem.controls
                     return;
                 }
 
-                // 3️⃣ Lưu nhân viên vào SQL (sử dụng biến 'age' đã được kiểm tra ở trên)
-                bool result = _personMgr.SavePersonToDatabase(userId, name, age, gender, address, frontVec, leftVec, rightVec);
+                // 2️⃣ Chuyển ảnh Mat sang byte[] để lưu gốc
+                byte[] frontImg, leftImg, rightImg;
+                using (var ms1 = new MemoryStream())
+                using (var ms2 = new MemoryStream())
+                using (var ms3 = new MemoryStream())
+                {
+                    var bmpFront = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(_capturedImagePaths[0]);
+                    var bmpLeft = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(_capturedImagePaths[1]);
+                    var bmpRight = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(_capturedImagePaths[2]);
 
-                // 4️⃣ Thông báo kết quả
+                    bmpFront.Save(ms1, System.Drawing.Imaging.ImageFormat.Jpeg);
+                    bmpLeft.Save(ms2, System.Drawing.Imaging.ImageFormat.Jpeg);
+                    bmpRight.Save(ms3, System.Drawing.Imaging.ImageFormat.Jpeg);
+
+                    frontImg = ms1.ToArray();
+                    leftImg = ms2.ToArray();
+                    rightImg = ms3.ToArray();
+                }
+
+                // 3️⃣ Tạo đối tượng User
+                var newUser = new User
+                {
+                    UserID = userId,
+                    FullName = name,
+                    Age = age,
+                    Gender = gender,
+                    Address = address,
+                    FaceFront = frontImg,
+                    FaceLeft = leftImg,
+                    FaceRight = rightImg,
+                    FaceFrontEncoding = frontVec,
+                    FaceLeftEncoding = leftVec,
+                    FaceRightEncoding = rightVec,
+                    CreatedAt = DateTime.Now,
+                    UpdatedAt = DateTime.Now
+                };
+
+                // 4️⃣ Lưu vào DB
+                bool result = _personMgr.AddNewUser(newUser, _capturedImagePaths);
+
                 if (result)
                 {
-                    MessageBox.Show($"✅ Đã lưu nhân viên {name} thành công!\nMã NV: {userId}",
+                    MessageBox.Show($"Đã lưu nhân viên {name} thành công!\nMã NV: {userId}",
                                     "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                    // Reset form
+                    // Reset giao diện
                     txtName.Clear();
                     txtAge.Clear();
                     txtAddress.Clear();
                     cbGender.SelectedIndex = -1;
-                    // Giả sử bạn có 3 PictureBox tên là picFront, picLeft, picRight
-                    if (picFront != null) picFront.Image = null;
-                    if (picLeft != null) picLeft.Image = null;
-                    if (picRight != null) picRight.Image = null;
+
+                    picFront.Image?.Dispose();
+                    picLeft.Image?.Dispose();
+                    picRight.Image?.Dispose();
+
+                    _capturedImagePaths.ForEach(m => m.Dispose());
                     _capturedImagePaths = null;
                 }
                 else
@@ -464,6 +437,7 @@ namespace FaceRecoSystem.controls
                 MessageBox.Show("Lỗi khi lưu nhân viên:\n" + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
         private void TxtAge_TextChanged(object sender, EventArgs e)
         {
             if (int.TryParse(txtAge.Text, out int age))
@@ -472,29 +446,39 @@ namespace FaceRecoSystem.controls
             }
             else if (!string.IsNullOrEmpty(txtAge.Text))
             {
-                txtAge.ForeColor = Color.Red; // Báo lỗi nếu nhập không phải là số
+                txtAge.ForeColor = Color.Red;
             }
             else
             {
-                txtAge.ForeColor = Color.Black; // Trả về màu đen nếu ô trống
+                txtAge.ForeColor = Color.Black;
             }
         }
-        private void btnDeleteFront_Click(object sender, EventArgs e)
+        private void btnDeleteImage_Click(object sender, EventArgs e)
         {
-            picFront.Image?.Dispose();
-            picFront.Image = null;
+            Button btn = sender as Button;
+            if (btn.Name.Contains("Front")) ClearPictureBoxImage(picFront);
+            else if (btn.Name.Contains("Left")) ClearPictureBoxImage(picLeft);
+            else if (btn.Name.Contains("Right")) ClearPictureBoxImage(picRight);
         }
-
-        private void btnDeleteLeft_Click(object sender, EventArgs e)
+        private void ClearPictureBoxImage(PictureBox pb)
         {
-            picLeft.Image?.Dispose();
-            picLeft.Image = null;
+            if (pb?.Image != null)
+            {
+                pb.Image.Dispose();
+                pb.Image = null;
+            }
         }
-
-        private void btnDeleteRight_Click(object sender, EventArgs e)
+        private void btnRefreshImages_Click(object sender, EventArgs e)
         {
-            picRight.Image?.Dispose();
-            picRight.Image = null;
+            ClearAllFacePictures();
+        }
+        private void ClearAllFacePictures()
+        {
+            ClearPictureBoxImage(picFront);
+            ClearPictureBoxImage(picLeft);
+            ClearPictureBoxImage(picRight);
+            _capturedImagePaths = null;
+            MessageBox.Show("Đã xóa ảnh!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
     }

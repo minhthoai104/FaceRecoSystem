@@ -1,5 +1,7 @@
 ﻿using FaceRecognitionDotNet;
+using FaceRecoSystem.core;
 using OpenCvSharp;
+using OpenCvSharp.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -10,176 +12,219 @@ namespace FaceRecoSystem
 {
     public class FaceDatabase : IDisposable
     {
-        private readonly FaceRecognition _fr;
-        private readonly string _dbPath;
         private readonly string _connectionString;
-        private readonly Dictionary<string, List<FaceEncoding>> _known = new();
+        private readonly FaceRecognition _fr;
+
+        private readonly Dictionary<string, List<double[]>> _known = new();
         private readonly Dictionary<string, User> _info = new();
 
-        public IReadOnlyDictionary<string, List<FaceEncoding>> Known => _known;
+        public IReadOnlyDictionary<string, List<double[]>> Known => _known;
+        public IReadOnlyDictionary<string, User> Info => _info;
 
-        public FaceDatabase(FaceRecognition fr, string dbPath, string connectionString)
+        public FaceDatabase(FaceRecognition fr, string connectionString)
         {
-            _fr = fr ?? throw new ArgumentNullException(nameof(fr));
-            _dbPath = dbPath ?? throw new ArgumentNullException(nameof(dbPath));
-            _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
-            Directory.CreateDirectory(_dbPath);
-
+            _connectionString = connectionString;
+            _fr = fr;
             LoadFromSql();
         }
 
-        private string GenerateId() => DateTime.Now.ToString("MMddHHmmss");
+        // ===== Helper: Convert Functions =====
+        public static byte[] DoubleArrayToBytes(double[] arr)
+        {
+            if (arr == null) return null;
+            var bytes = new byte[arr.Length * sizeof(double)];
+            Buffer.BlockCopy(arr, 0, bytes, 0, bytes.Length);
+            return bytes;
+        }
 
-        // Lấy tất cả Users từ SQL
+        public static double[] BytesToDoubleArray(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length == 0) return null;
+            var arr = new double[bytes.Length / sizeof(double)];
+            Buffer.BlockCopy(bytes, 0, arr, 0, bytes.Length);
+            return arr;
+        }
+
+        public static byte[] MatToBytes(Mat mat)
+        {
+            if (mat == null || mat.Empty()) return null;
+            return mat.ToBytes(".jpg");
+        }
+
+        // ===== Public CRUD =====
         public List<User> GetAllPersons()
         {
             var persons = new List<User>();
             using var conn = new SqlConnection(_connectionString);
             conn.Open();
 
-            using var cmd = new SqlCommand("SELECT * FROM Users", conn);
+            using var cmd = new SqlCommand("SELECT * FROM Users WHERE IsActive = 1", conn);
             using var reader = cmd.ExecuteReader();
-
             while (reader.Read())
-            {
-                persons.Add(new User
-                {
-                    UserID = reader["UserID"].ToString(),
-                    FullName = reader["FullName"].ToString(),
-                    Age = reader["Age"] == DBNull.Value ? 0 : Convert.ToInt32(reader["Age"]),
-                    Gender = reader["Gender"]?.ToString(),
-                    Address = reader["Address"]?.ToString(),
-                    FaceFrontPath = reader["FaceFront"]?.ToString(),
-                    FaceLeftPath = reader["FaceLeft"]?.ToString(),
-                    FaceRightPath = reader["FaceRight"]?.ToString()
-                });
-            }
-
+                persons.Add(MapReaderToUser(reader));
             return persons;
         }
 
-        public void Save(string name, int age, string gender, string address, List<Mat> faces)
+        public User? GetPersonByName(string name)
         {
-            if (faces == null || faces.Count < 3)
-                throw new ArgumentException("Cần 3 ảnh mặt: Front, Left, Right");
+            if (string.IsNullOrWhiteSpace(name))
+                return null;
 
-            string id = GenerateId();
-            string folder = Path.Combine(_dbPath, $"{name}_{id}");
-            Directory.CreateDirectory(folder);
+            using var conn = new SqlConnection(_connectionString);
+            conn.Open();
 
-            string faceFrontPath = Path.Combine(folder, $"{name}_front.jpg");
-            string faceLeftPath = Path.Combine(folder, $"{name}_left.jpg");
-            string faceRightPath = Path.Combine(folder, $"{name}_right.jpg");
+            using var cmd = new SqlCommand("SELECT * FROM Users WHERE FullName = @FullName", conn);
+            cmd.Parameters.AddWithValue("@FullName", name);
+            using var reader = cmd.ExecuteReader();
 
-            Cv2.ImWrite(faceFrontPath, faces[0]);
-            Cv2.ImWrite(faceLeftPath, faces[1]);
-            Cv2.ImWrite(faceRightPath, faces[2]);
+            return reader.Read() ? MapReaderToUser(reader) : null;
+        }
 
-            var encList = new List<FaceEncoding>();
-
-            foreach (string path in new[] { faceFrontPath, faceLeftPath, faceRightPath })
-            {
-                using var img = FaceRecognition.LoadImageFile(path);
-                var enc = _fr.FaceEncodings(img).FirstOrDefault();
-                if (enc != null)
-                    encList.Add(enc);
-            }
-
-            if (encList.Count == 0)
-                throw new Exception("Không tạo được encoding cho " + name);
-
-            _known[name] = encList;
-            _info[name] = new User
-            {
-                UserID = id,
-                FullName = name,
-                Age = age,
-                Gender = gender,
-                Address = address,
-                FaceFrontPath = faceFrontPath,
-                FaceLeftPath = faceLeftPath,
-                FaceRightPath = faceRightPath
-            };
-
+        public void InsertUser(User user)
+        {
             using var conn = new SqlConnection(_connectionString);
             conn.Open();
 
             string sql = @"
-                INSERT INTO Users (UserID, FullName, Age, Gender, Address, FaceFront, FaceLeft, FaceRight, CreatedAt, UpdatedAt)
-                VALUES (@UserID, @FullName, @Age, @Gender, @Address, @FaceFront, @FaceLeft, @FaceRight, GETDATE(), GETDATE())";
+                INSERT INTO Users (
+                    UserID, FullName, Age, Gender, Address,
+                    FaceFront, FaceLeft, FaceRight,
+                    FaceFrontEncoding, FaceLeftEncoding, FaceRightEncoding,
+                    IsActive, CreatedAt, UpdatedAt
+                )
+                VALUES (
+                    @UserID, @FullName, @Age, @Gender, @Address,
+                    @FaceFront, @FaceLeft, @FaceRight,
+                    @FaceFrontEnc, @FaceLeftEnc, @FaceRightEnc,
+                    1, GETDATE(), GETDATE()
+                )";
 
             using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@UserID", id);
-            cmd.Parameters.AddWithValue("@FullName", name);
-            cmd.Parameters.AddWithValue("@Age", age);
-            cmd.Parameters.AddWithValue("@Gender", gender);
-            cmd.Parameters.AddWithValue("@Address", address);
-            cmd.Parameters.AddWithValue("@FaceFront", faceFrontPath);
-            cmd.Parameters.AddWithValue("@FaceLeft", faceLeftPath);
-            cmd.Parameters.AddWithValue("@FaceRight", faceRightPath);
+            cmd.Parameters.AddWithValue("@UserID", user.UserID);
+            cmd.Parameters.AddWithValue("@FullName", user.FullName);
+            cmd.Parameters.AddWithValue("@Age", user.Age);
+            cmd.Parameters.AddWithValue("@Gender", (object?)user.Gender ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Address", (object?)user.Address ?? DBNull.Value);
+
+            cmd.Parameters.AddWithValue("@FaceFront", (object?)user.FaceFront ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@FaceLeft", (object?)user.FaceLeft ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@FaceRight", (object?)user.FaceRight ?? DBNull.Value);
+
+            cmd.Parameters.AddWithValue("@FaceFrontEnc", (object?)user.FaceFrontEncoding ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@FaceLeftEnc", (object?)user.FaceLeftEncoding ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@FaceRightEnc", (object?)user.FaceRightEncoding ?? DBNull.Value);
+
             cmd.ExecuteNonQuery();
 
-            Console.WriteLine($"[DB] ✅ Saved {name} với 3 góc mặt vào SQL");
+            // cập nhật cache
+            _info[user.FullName] = user;
+            _known[user.FullName] = new List<double[]>
+            {
+                BytesToDoubleArray(user.FaceFrontEncoding),
+                BytesToDoubleArray(user.FaceLeftEncoding),
+                BytesToDoubleArray(user.FaceRightEncoding)
+            };
         }
 
-
-        // Load database from SQL and produce encodings for available images (front/left/right)
-        private void LoadFromSql()
+        public void UpdateUser(User user)
         {
-            _known.Clear();
-            _info.Clear();
-
             using var conn = new SqlConnection(_connectionString);
             conn.Open();
 
-            using var cmd = new SqlCommand("SELECT * FROM Users", conn);
-            using var reader = cmd.ExecuteReader();
+            string sql = @"
+                UPDATE Users SET 
+                    Age=@Age, Gender=@Gender, Address=@Address,
+                    FaceFront=@FaceFront, FaceLeft=@FaceLeft, FaceRight=@FaceRight,
+                    FaceFrontEncoding=@FaceFrontEnc, FaceLeftEncoding=@FaceLeftEnc, FaceRightEncoding=@FaceRightEnc,
+                    UpdatedAt=GETDATE()
+                WHERE FullName=@FullName";
 
-            while (reader.Read())
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@FullName", user.FullName);
+            cmd.Parameters.AddWithValue("@Age", user.Age);
+            cmd.Parameters.AddWithValue("@Gender", (object?)user.Gender ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Address", (object?)user.Address ?? DBNull.Value);
+
+            cmd.Parameters.AddWithValue("@FaceFront", (object?)user.FaceFront ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@FaceLeft", (object?)user.FaceLeft ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@FaceRight", (object?)user.FaceRight ?? DBNull.Value);
+
+            cmd.Parameters.AddWithValue("@FaceFrontEnc", (object?)user.FaceFrontEncoding ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@FaceLeftEnc", (object?)user.FaceLeftEncoding ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@FaceRightEnc", (object?)user.FaceRightEncoding ?? DBNull.Value);
+
+            cmd.ExecuteNonQuery();
+
+            _info[user.FullName] = user;
+            _known[user.FullName] = new List<double[]>
             {
-                var u = new User
-                {
-                    UserID = reader["UserID"].ToString(),
-                    FullName = reader["FullName"].ToString(),
-                    Age = Convert.ToInt32(reader["Age"]),
-                    Gender = reader["Gender"].ToString(),
-                    Address = reader["Address"].ToString(),
-                    FaceFrontPath = reader["FaceFront"]?.ToString(),
-                    FaceLeftPath = reader["FaceLeft"]?.ToString(),
-                    FaceRightPath = reader["FaceRight"]?.ToString()
-                };
-
-                _info[u.FullName] = u;
-
-                var encList = new List<FaceEncoding>();
-                foreach (string path in new[] { u.FaceFrontPath, u.FaceLeftPath, u.FaceRightPath })
-                {
-                    if (!string.IsNullOrEmpty(path) && File.Exists(path))
-                    {
-                        using var img = FaceRecognition.LoadImageFile(path);
-                        var enc = _fr.FaceEncodings(img).FirstOrDefault();
-                        if (enc != null)
-                            encList.Add(enc);
-                    }
-                }
-
-                if (encList.Count > 0)
-                    _known[u.FullName] = encList;
-            }
-
-            Console.WriteLine($"[DB] ✅ Loaded {_info.Count} users với vector 3 góc mặt");
+                BytesToDoubleArray(user.FaceFrontEncoding),
+                BytesToDoubleArray(user.FaceLeftEncoding),
+                BytesToDoubleArray(user.FaceRightEncoding)
+            };
         }
+
+        public void DeleteUser(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return;
+            using var conn = new SqlConnection(_connectionString);
+            conn.Open();
+
+            string sql = "UPDATE Users SET IsActive = 0, UpdatedAt = GETDATE() WHERE FullName = @FullName";
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@FullName", name);
+            cmd.ExecuteNonQuery();
+
+            if (_info.ContainsKey(name))
+                _info[name].IsActive = false;
+            _known.Remove(name);
+        }
+
+        public void SaveFaceImagesAndEncodings(User user, List<Mat> faces)
+        {
+            if (faces == null || faces.Count < 3)
+                throw new Exception("Cần đủ 3 ảnh: front, left, right");
+
+            user.FaceFront = MatToBytes(faces[0]);
+            user.FaceLeft = MatToBytes(faces[1]);
+            user.FaceRight = MatToBytes(faces[2]);
+
+            user.FaceFrontEncoding = GetFaceEncodingAsBytes(faces[0]);
+            user.FaceLeftEncoding = GetFaceEncodingAsBytes(faces[1]);
+            user.FaceRightEncoding = GetFaceEncodingAsBytes(faces[2]);
+
+            if (user.FaceFrontEncoding == null || user.FaceLeftEncoding == null || user.FaceRightEncoding == null)
+                throw new Exception($"Không thể trích xuất encoding cho {user.FullName}");
+
+            InsertUser(user);
+        }
+
+        public byte[] GetFaceEncodingAsBytes(Mat face)
+        {
+            using var img = face.ToFaceRecognitionImage();
+            using var enc = _fr.FaceEncodings(img).FirstOrDefault();
+            if (enc == null) return null;
+            var arr = enc.GetRawEncoding();
+            return DoubleArrayToBytes(arr);
+        }
+
+        // ===== Face Matching =====
         public (string name, double confidence)? FindClosestMatch(FaceEncoding encoding)
         {
+            if (encoding == null || _known.Count == 0)
+                return null;
+
+            double[] targetEnc = encoding.GetRawEncoding();
             const double TOLERANCE = 0.45;
+
             string bestName = null;
             double bestDistance = double.MaxValue;
 
             foreach (var kvp in _known)
             {
-                foreach (var enc in kvp.Value)
+                foreach (var knownEnc in kvp.Value)
                 {
-                    double dist = FaceRecognition.FaceDistance(enc, encoding);
+                    double dist = ComputeFaceDistance(knownEnc, targetEnc);
                     if (dist < bestDistance)
                     {
                         bestDistance = dist;
@@ -190,131 +235,85 @@ namespace FaceRecoSystem
 
             if (bestName != null && bestDistance < TOLERANCE)
             {
-                double confidence = (1.0 - bestDistance) * 100;
-                return (bestName, confidence);
+                double confidence = (1.0 - bestDistance) * 100.0;
+                return (bestName, Math.Round(confidence, 2));
             }
 
             return null;
         }
 
-        public string FacesPath => _dbPath;
-
-        public User? GetPersonByName(string name)
+        // ===== Load from SQL =====
+        private void LoadFromSql()
         {
-            if (_info.ContainsKey(name)) return _info[name];
+            _known.Clear();
+            _info.Clear();
 
             using var conn = new SqlConnection(_connectionString);
             conn.Open();
 
-            string sql = "SELECT * FROM Users WHERE FullName = @FullName";
-            using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@FullName", name);
-
+            using var cmd = new SqlCommand("SELECT * FROM Users WHERE IsActive = 1", conn);
             using var reader = cmd.ExecuteReader();
-            if (reader.Read())
+
+            while (reader.Read())
             {
-                return new User
+                var user = MapReaderToUser(reader);
+                _info[user.FullName] = user;
+
+                var encs = new List<double[]>();
+                foreach (string field in new[] { "FaceFrontEncoding", "FaceLeftEncoding", "FaceRightEncoding" })
                 {
-                    UserID = reader["UserID"].ToString(),
-                    FullName = reader["FullName"].ToString(),
-                    Age = reader["Age"] == DBNull.Value ? 0 : Convert.ToInt32(reader["Age"]),
-                    Gender = reader["Gender"]?.ToString(),
-                    Address = reader["Address"]?.ToString(),
-                    FaceFrontPath = reader["FaceFront"]?.ToString(),
-                    FaceLeftPath = reader["FaceLeft"]?.ToString(),
-                    FaceRightPath = reader["FaceRight"]?.ToString()
-                };
+                    if (reader[field] != DBNull.Value)
+                    {
+                        var bytes = (byte[])reader[field];
+                        var arr = BytesToDoubleArray(bytes);
+                        if (arr != null)
+                            encs.Add(arr);
+                    }
+                }
+                if (encs.Count > 0)
+                    _known[user.FullName] = encs;
             }
-
-            return null;
         }
 
-        public void UpdateEncoding(string name, FaceEncoding newEncoding)
+        // ===== Helper =====
+        private static double ComputeFaceDistance(double[] enc1, double[] enc2)
         {
-            if (newEncoding == null) return;
+            if (enc1 == null || enc2 == null || enc1.Length != enc2.Length)
+                return double.MaxValue;
 
-            if (!_known.ContainsKey(name))
-                _known[name] = new List<FaceEncoding>();
-
-            _known[name].Clear();
-            _known[name].Add(newEncoding);
-
-            Console.WriteLine($"[DB] ✅ Updated encoding for {name}");
-        }
-
-        public void SavePerson(User person)
-        {
-            using var conn = new SqlConnection(_connectionString);
-            conn.Open();
-
-            string sql = @"UPDATE Users SET 
-                    FullName = @FullName,
-                    Age = @Age,
-                    Gender = @Gender,
-                    Address = @Address,
-                    UpdatedAt = GETDATE()
-                   WHERE UserID = @UserID";
-
-            using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@UserID", person.UserID);
-            cmd.Parameters.AddWithValue("@FullName", person.FullName);
-            cmd.Parameters.AddWithValue("@Age", person.Age);
-            cmd.Parameters.AddWithValue("@Gender", person.Gender ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@Address", person.Address ?? (object)DBNull.Value);
-            cmd.ExecuteNonQuery();
-
-            _info[person.FullName] = person;
-
-            Console.WriteLine($"[DB] ✅ Updated info for {person.FullName}");
-        }
-
-        public void Delete(string name)
-        {
-            _info.Remove(name);
-            _known.Remove(name);
-
-            using var conn = new SqlConnection(_connectionString);
-            conn.Open();
-
-            string sql = "DELETE FROM Users WHERE FullName = @FullName";
-            using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@FullName", name);
-            cmd.ExecuteNonQuery();
-
-            var folder = Directory.GetDirectories(_dbPath)
-                .FirstOrDefault(d => Path.GetFileName(d).StartsWith(name + "_"));
-            if (folder != null)
-                Directory.Delete(folder, true);
-
-            Console.WriteLine($"[DB] 🗑️ Deleted {name}");
+            double sum = 0;
+            for (int i = 0; i < enc1.Length; i++)
+            {
+                double diff = enc1[i] - enc2[i];
+                sum += diff * diff;
+            }
+            return Math.Sqrt(sum / enc1.Length);
         }
 
         public bool TryGetInfo(string name, out User info)
+            => _info.TryGetValue(name, out info);
+
+        private static User MapReaderToUser(SqlDataReader reader)
         {
-            if (_info.ContainsKey(name))
+            return new User
             {
-                info = _info[name];
-                return true;
-            }
-
-            info = null;
-            return false;
-        }
-
-        public void PrintDebugInfo()
-        {
-            Console.WriteLine("[DB] Known persons summary:");
-            foreach (var kv in _known)
-                Console.WriteLine($"  - {kv.Key}: {kv.Value.Count} encodings");
+                UserID = reader["UserID"].ToString(),
+                FullName = reader["FullName"].ToString(),
+                Age = reader["Age"] == DBNull.Value ? 0 : Convert.ToInt32(reader["Age"]),
+                Gender = reader["Gender"]?.ToString(),
+                Address = reader["Address"]?.ToString(),
+                IsActive = reader["IsActive"] != DBNull.Value && Convert.ToBoolean(reader["IsActive"]),
+                FaceFront = reader["FaceFront"] == DBNull.Value ? null : (byte[])reader["FaceFront"],
+                FaceLeft = reader["FaceLeft"] == DBNull.Value ? null : (byte[])reader["FaceLeft"],
+                FaceRight = reader["FaceRight"] == DBNull.Value ? null : (byte[])reader["FaceRight"]
+            };
         }
 
         public void Dispose()
         {
-            foreach (var encList in _known.Values)
-                foreach (var enc in encList)
-                    enc.Dispose();
             _known.Clear();
-            GC.Collect();
+            _info.Clear();
+            GC.SuppressFinalize(this);
         }
     }
 }

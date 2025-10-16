@@ -33,7 +33,6 @@ namespace FaceRecoSystem.controls
 
         private readonly CascadeClassifier _faceCascade;
 
-        // smoothing / anti-flicker
         private Rect[] _lastFaces = Array.Empty<Rect>();
         private DateTime _lastFaceTime = DateTime.MinValue;
 
@@ -80,7 +79,6 @@ namespace FaceRecoSystem.controls
                     }
 
                     frameCount++;
-                    // process every 3 frames to reduce load
                     if (frameCount % 3 == 0)
                         ProcessFrame(temp);
 
@@ -98,7 +96,6 @@ namespace FaceRecoSystem.controls
         {
             try
             {
-                // downscale for detection (faster)
                 using var small = new Mat();
                 Cv2.Resize(frame, small, new Size(frame.Width / 2, frame.Height / 2));
                 using var gray = new Mat();
@@ -110,7 +107,6 @@ namespace FaceRecoSystem.controls
                 Rect[] faces;
                 if (facesSmall.Length == 0)
                 {
-                    // keep old boxes for short time to avoid flicker
                     if ((DateTime.Now - _lastFaceTime).TotalSeconds < 1 && _lastFaces.Length > 0)
                         faces = _lastFaces;
                     else
@@ -123,7 +119,6 @@ namespace FaceRecoSystem.controls
                 }
                 else
                 {
-                    // scale boxes to original frame
                     faces = facesSmall.Select(f => new Rect(f.X * 2, f.Y * 2, f.Width * 2, f.Height * 2)).ToArray();
                     _lastFaces = faces;
                     _lastFaceTime = DateTime.Now;
@@ -170,7 +165,6 @@ namespace FaceRecoSystem.controls
                         continue;
                     }
 
-                    // stable 3 seconds
                     if (_curName != name)
                     {
                         _curName = name;
@@ -184,7 +178,6 @@ namespace FaceRecoSystem.controls
                         continue;
                     }
 
-                    // check-in every 10s max
                     if ((DateTime.Now - _lastCheck).TotalSeconds > 10)
                     {
                         SaveAttendanceByName(name, bmp);
