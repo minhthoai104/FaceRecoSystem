@@ -113,7 +113,7 @@ namespace FaceRecoSystem.controls
                         lblScanStatus.Text = "Trạng thái: Đang quét...";
                         btnDeleteByFace.Enabled = false;
                     }
-
+                    
                     picCamera.Image = frame.ToBitmap();
                 }
             }

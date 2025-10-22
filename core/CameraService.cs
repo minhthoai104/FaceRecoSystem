@@ -1,4 +1,5 @@
 ﻿using FaceRecognitionDotNet;
+using FaceRecoSystem.core;
 using OpenCvSharp;
 using OpenCvSharp.Extensions;
 using System;
@@ -14,13 +15,12 @@ namespace FaceRecoSystem
 {
     public class CameraService : IDisposable
     {
-        private ScrfdDetector _scrfd;
-        private bool _useScrfd = true;
+        private bool _usehaarCascade = true;
         private readonly FaceRecognition _fr;
         private readonly FaceDatabase _db;
         private readonly Recognizer _rec;
         private readonly object _lock = new();
-
+        private CascadeClassifier _haarCascade;
         private VideoCapture _capture;
         private Thread _cameraThread;
         private bool _running;
@@ -37,28 +37,50 @@ namespace FaceRecoSystem
         {
             _fr = fr;
             _db = db;
-            _rec = new Recognizer(db.Known, tolerance: 0.42);
+            _rec = new Recognizer(db.Known, tolerance: 0.6);
             _cameraIndex = cameraIndex;
             try
             {
-                string modelPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "models", "scrfd_person_2.5g.onnx");
+                string modelPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "models", "haarcascade_frontalface_default.xml");
                 if (File.Exists(modelPath))
                 {
-                    _scrfd = new ScrfdDetector(modelPath);
-                    _useScrfd = true;
-                    Console.WriteLine("[SCRFD] Model loaded successfully.");
+                    _haarCascade = new CascadeClassifier(modelPath);
+                    _usehaarCascade = true;
+                    Console.WriteLine("[Haarcascade] Model loaded successfully.");
                 }
                 else
                 {
-                    Console.WriteLine("[SCRFD] Model not found, using HaarCascade fallback.");
-                    _useScrfd = false;
+                    Console.WriteLine("[Haarcascade] Model not found, using HaarCascade fallback.");
+                    _usehaarCascade = false;
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[SCRFD] Load error: {ex.Message}");
-                _useScrfd = false;
+                Console.WriteLine($"[Haarcascade] Load error: {ex.Message}");
+                _usehaarCascade = false;
             }
+        }
+
+        public bool Start(int camIndex = 0)
+        {
+            _capture = new VideoCapture(camIndex, VideoCaptureAPIs.DSHOW);
+            _capture.Set(VideoCaptureProperties.FrameWidth, 1280);
+            _capture.Set(VideoCaptureProperties.FrameHeight, 720);
+
+            _running = _capture.IsOpened();
+            return _running;
+        }
+
+        public Bitmap CaptureFrame()
+        {
+            if (!_running || _capture == null)
+                return null;
+
+            using var mat = new Mat();
+            if (!_capture.Read(mat) || mat.Empty())
+                return null;
+
+            return BitmapConverter.ToBitmap(mat);
         }
 
         public void StartCamera(PictureBox previewBox)
@@ -81,7 +103,6 @@ namespace FaceRecoSystem
                 MessageBox.Show($"Đã xảy ra lỗi khi khởi động camera: {ex.Message}", "Lỗi nghiêm trọng", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-
 
             _running = true;
             _cameraThread = new Thread(CameraLoop)
@@ -140,21 +161,21 @@ namespace FaceRecoSystem
         public void StopCamera()
         {
             _running = false;
-            _cameraThread?.Join(200);
+            try
+            {
+                _cameraThread?.Join(200);
+            }
+            catch { /* ignore */ }
 
             lock (_lock)
             {
-                _capture?.Release();
-                _capture?.Dispose();
-                _capture = null;
+                if (_capture != null)
+                {
+                    try { _capture.Release(); } catch { }
+                    try { _capture.Dispose(); } catch { }
+                    _capture = null;
+                }
             }
-        }
-
-        public Bitmap CaptureFrame()
-        {
-            if (_previewBox?.Image == null)
-                throw new Exception("❌ Chưa có hình ảnh từ camera!");
-            return new Bitmap(_previewBox.Image);
         }
 
         public void StartRecognition()
@@ -187,7 +208,6 @@ namespace FaceRecoSystem
                 using var frImg = FaceRecognition.LoadImageFile(tempPath);
                 File.Delete(tempPath);
 
-
                 var faceLocations = _fr.FaceLocations(frImg, 1, Model.Hog).ToList();
                 foreach (var loc in faceLocations)
                 {
@@ -201,7 +221,10 @@ namespace FaceRecoSystem
                     var encoding = _fr.FaceEncodings(frImg, new[] { loc }).FirstOrDefault();
                     if (encoding != null)
                     {
-                        var (name, conf) = _rec.Recognize(encoding);
+                        // -> Recognize returns 4-tuple now: (name, distance, cosine, confidence)
+                        var (name, distance, cosine, conf) = _rec.Recognize(encoding);
+
+                        // Color and label logic unchanged, use conf
                         Cv2.Rectangle(frame, rect, conf > 50 ? Scalar.LimeGreen : Scalar.Red, 2);
                         Cv2.PutText(frame, $"{name} ({conf:F1}%)",
                             new Point(rect.X, rect.Y - 10),
@@ -216,10 +239,84 @@ namespace FaceRecoSystem
             Cv2.DestroyAllWindows();
         }
 
+        public void StartRecognitionWithAttendance()
+        {
+            using var cap = new VideoCapture(_cameraIndex, VideoCaptureAPIs.DSHOW);
+            if (!cap.IsOpened())
+            {
+                MessageBox.Show("Không thể mở camera!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            cap.Set(VideoCaptureProperties.FrameWidth, 1280);
+            cap.Set(VideoCaptureProperties.FrameHeight, 720);
+
+            var frame = new Mat();
+            Cv2.NamedWindow("Attendance Camera");
+
+            while (true)
+            {
+                cap.Read(frame);
+                if (frame.Empty()) continue;
+
+                using var small = new Mat();
+                Cv2.Resize(frame, small, new Size(), 0.25, 0.25);
+
+                using var bmp = BitmapConverter.ToBitmap(small);
+                string tmp = Path.GetTempFileName();
+                bmp.Save(tmp, System.Drawing.Imaging.ImageFormat.Bmp);
+
+                using var frImg = FaceRecognition.LoadImageFile(tmp);
+                File.Delete(tmp);
+
+                var faceLocs = _fr.FaceLocations(frImg, 1, Model.Hog).ToList();
+                foreach (var loc in faceLocs)
+                {
+                    var rect = new Rect(
+                        (int)(loc.Left / 0.25),
+                        (int)(loc.Top / 0.25),
+                        (int)((loc.Right - loc.Left) / 0.25),
+                        (int)((loc.Bottom - loc.Top) / 0.25)
+                    );
+
+                    var encoding = _fr.FaceEncodings(frImg, new[] { loc }).FirstOrDefault();
+                    if (encoding == null) continue;
+
+                    // -> Recognize returns 4-tuple now
+                    var (name, distance, cosine, conf) = _rec.Recognize(encoding);
+
+                    Scalar color = conf > 50 ? Scalar.LimeGreen : Scalar.Red;
+
+                    Cv2.Rectangle(frame, rect, color, 2);
+                    Cv2.PutText(frame, $"{name} ({conf:F1}%)",
+                        new Point(rect.X, rect.Y - 10),
+                        HersheyFonts.HersheySimplex, 0.6, Scalar.White, 2);
+
+                    // Attendance logic: chỉ mark nếu không Unknown và confidence đủ cao
+                    if (!string.Equals(name, "Unknown", StringComparison.OrdinalIgnoreCase) && conf >= 60)
+                    {
+                        // Use a clone of frame to avoid issues with Mat lifetime
+                        using var frameClone = frame.Clone();
+                        _db.MarkAttendance(name, frameClone);
+                        // frameClone will be disposed by MarkAttendance (or when leaving using)
+                    }
+                }
+
+                Cv2.ImShow("Attendance Camera", frame);
+                if (Cv2.WaitKey(1) == 27) break;
+            }
+
+            Cv2.DestroyAllWindows();
+        }
+
         public void Dispose()
         {
             StopCamera();
+            if (_capture != null)
+            {
+                try { _capture.Release(); } catch { }
+                try { _capture.Dispose(); } catch { }
+            }
         }
     }
 }
-

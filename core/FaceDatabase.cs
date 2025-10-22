@@ -1,4 +1,5 @@
-﻿using FaceRecognitionDotNet;
+﻿using Dapper;
+using FaceRecognitionDotNet;
 using FaceRecoSystem.core;
 using OpenCvSharp;
 using OpenCvSharp.Extensions;
@@ -14,10 +15,8 @@ namespace FaceRecoSystem
     {
         private readonly string _connectionString;
         private readonly FaceRecognition _fr;
-
         private readonly Dictionary<string, List<double[]>> _known = new();
         private readonly Dictionary<string, User> _info = new();
-
         public IReadOnlyDictionary<string, List<double[]>> Known => _known;
         public IReadOnlyDictionary<string, User> Info => _info;
 
@@ -28,7 +27,6 @@ namespace FaceRecoSystem
             LoadFromSql();
         }
 
-        // ===== Helper: Convert Functions =====
         public static byte[] DoubleArrayToBytes(double[] arr)
         {
             if (arr == null) return null;
@@ -51,18 +49,28 @@ namespace FaceRecoSystem
             return mat.ToBytes(".jpg");
         }
 
-        // ===== Public CRUD =====
-        public List<User> GetAllPersons()
+        public List<User> GetAllUsers()
         {
-            var persons = new List<User>();
+            var users = new List<User>();
             using var conn = new SqlConnection(_connectionString);
             conn.Open();
-
-            using var cmd = new SqlCommand("SELECT * FROM Users WHERE IsActive = 1", conn);
+            using var cmd = new SqlCommand("SELECT UserID, FullName, Age, Gender, Address, FaceFront, FaceLeft, FaceRight FROM Users", conn);
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
-                persons.Add(MapReaderToUser(reader));
-            return persons;
+            {
+                users.Add(new User
+                {
+                    UserID = reader["UserID"].ToString(),
+                    FullName = reader["FullName"].ToString(),
+                    Age = Convert.ToInt32(reader["Age"]),
+                    Gender = reader["Gender"].ToString(),
+                    Address = reader["Address"].ToString(),
+                    FaceFront = reader["FaceFront"] == DBNull.Value ? null : (byte[])reader["FaceFront"],
+                    FaceLeft = reader["FaceLeft"] == DBNull.Value ? null : (byte[])reader["FaceLeft"],
+                    FaceRight = reader["FaceRight"] == DBNull.Value ? null : (byte[])reader["FaceRight"]
+                });
+            }
+            return users;
         }
 
         public User? GetPersonByName(string name)
@@ -116,7 +124,6 @@ namespace FaceRecoSystem
 
             cmd.ExecuteNonQuery();
 
-            // cập nhật cache
             _info[user.FullName] = user;
             _known[user.FullName] = new List<double[]>
             {
@@ -124,6 +131,7 @@ namespace FaceRecoSystem
                 BytesToDoubleArray(user.FaceLeftEncoding),
                 BytesToDoubleArray(user.FaceRightEncoding)
             };
+            LoadFromSql();
         }
 
         public void UpdateUser(User user)
@@ -162,6 +170,7 @@ namespace FaceRecoSystem
                 BytesToDoubleArray(user.FaceLeftEncoding),
                 BytesToDoubleArray(user.FaceRightEncoding)
             };
+            LoadFromSql();
         }
 
         public void DeleteUser(string name)
@@ -182,40 +191,48 @@ namespace FaceRecoSystem
 
         public void SaveFaceImagesAndEncodings(User user, List<Mat> faces)
         {
-            if (faces == null || faces.Count < 3)
-                throw new Exception("Cần đủ 3 ảnh: front, left, right");
-
-            user.FaceFront = MatToBytes(faces[0]);
-            user.FaceLeft = MatToBytes(faces[1]);
-            user.FaceRight = MatToBytes(faces[2]);
-
-            user.FaceFrontEncoding = GetFaceEncodingAsBytes(faces[0]);
-            user.FaceLeftEncoding = GetFaceEncodingAsBytes(faces[1]);
-            user.FaceRightEncoding = GetFaceEncodingAsBytes(faces[2]);
-
-            if (user.FaceFrontEncoding == null || user.FaceLeftEncoding == null || user.FaceRightEncoding == null)
-                throw new Exception($"Không thể trích xuất encoding cho {user.FullName}");
-
-            InsertUser(user);
+            try
+            {
+                Console.WriteLine("[DB] Bắt đầu lưu thông tin người dùng...");
+                InsertUser(user);
+                Console.WriteLine("[DB] ✅ Đã chèn người dùng vào bảng");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DB] ❌ Lỗi khi lưu vào DB: {ex.Message}");
+                throw; // ném ra để AddNewUser bắt được
+            }
         }
+
 
         public byte[] GetFaceEncodingAsBytes(Mat face)
         {
             using var img = face.ToFaceRecognitionImage();
             using var enc = _fr.FaceEncodings(img).FirstOrDefault();
             if (enc == null) return null;
-            var arr = enc.GetRawEncoding();
-            return DoubleArrayToBytes(arr);
+
+            double[] raw = enc.GetRawEncoding();
+
+            return DoubleArrayToBytes(raw);
         }
 
-        // ===== Face Matching =====
+
+        public static float[] DoubleToFloat(double[] src)
+        {
+            if (src == null) return null;
+            float[] result = new float[src.Length];
+            for (int i = 0; i < src.Length; i++)
+                result[i] = (float)src[i];
+            return result;
+        }
+
         public (string name, double confidence)? FindClosestMatch(FaceEncoding encoding)
         {
             if (encoding == null || _known.Count == 0)
                 return null;
 
-            double[] targetEnc = encoding.GetRawEncoding();
-            const double TOLERANCE = 0.45;
+            double[] targetEnc = Array.ConvertAll(encoding.GetRawEncoding(), x => (double)x);
+            const double TOLERANCE = 0.7;
 
             string bestName = null;
             double bestDistance = double.MaxValue;
@@ -239,10 +256,10 @@ namespace FaceRecoSystem
                 return (bestName, Math.Round(confidence, 2));
             }
 
+            Console.WriteLine($"[FindClosestMatch] ❌ Không khớp (best={bestName ?? "null"}, dist={bestDistance:F3})");
             return null;
         }
 
-        // ===== Load from SQL =====
         private void LoadFromSql()
         {
             _known.Clear();
@@ -273,9 +290,16 @@ namespace FaceRecoSystem
                 if (encs.Count > 0)
                     _known[user.FullName] = encs;
             }
+
+            Console.WriteLine($"[LoadFromSql] ✅ Đã tải {_known.Count} người từ DB");
+            Console.WriteLine($"Loaded {_known.Count} users.");
+            foreach (var kvp in _known)
+            {
+                Console.WriteLine($"User: {kvp.Key}, Encodings: {kvp.Value.Count}, First vector len: {kvp.Value[0]?.Length}");
+            }
+
         }
 
-        // ===== Helper =====
         private static double ComputeFaceDistance(double[] enc1, double[] enc2)
         {
             if (enc1 == null || enc2 == null || enc1.Length != enc2.Length)
@@ -307,6 +331,88 @@ namespace FaceRecoSystem
                 FaceLeft = reader["FaceLeft"] == DBNull.Value ? null : (byte[])reader["FaceLeft"],
                 FaceRight = reader["FaceRight"] == DBNull.Value ? null : (byte[])reader["FaceRight"]
             };
+        }
+
+        public async void MarkAttendance(string userName, Mat frame)
+        {
+            if (!TryGetInfo(userName, out var user))
+            {
+                Console.WriteLine($"[Attendance] Không tìm thấy thông tin người: {userName}");
+                return;
+            }
+
+            try
+            {
+                byte[] imageBytes = frame.ToBytes(".jpg");
+
+                string result = await AttendanceHelper.ProcessCheckInOrCheckOut(user.UserID, imageBytes);
+
+                if (result == "CHECKIN" || result == "CHECKOUT")
+                {
+                    Console.WriteLine($"[Attendance] Ghi nhận thành công cho {userName}: {result}");
+                }
+                else if (result.StartsWith("ERROR"))
+                {
+                    Console.WriteLine($"[Attendance] Lỗi ghi công cho {userName}: {result}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Attendance] Lỗi hệ thống khi ghi công cho {userName}: {ex.Message}");
+            }
+        }
+
+        public List<Attendance> GetAllAttendance()
+        {
+            const string sql = @"
+                SELECT a.AttendanceID, a.UserID, a.CheckInTime, a.CheckOutTime,
+                       a.CheckInImage, a.CheckOutImage,
+                       u.FullName, u.Age, u.Gender, u.Address
+                FROM Attendance a
+                INNER JOIN Users u ON a.UserID = u.UserID
+                ORDER BY a.CheckInTime DESC;";
+
+            using (var conn = new SqlConnection(_connectionString))
+            {
+                var list = conn.Query(sql).Select(row => new Attendance
+                {
+                    AttendanceID = row.AttendanceID,
+                    UserID = row.UserID,
+                    CheckInTime = row.CheckInTime,
+                    CheckOutTime = row.CheckOutTime,
+                    CheckInImage = row.CheckInImage == null ? null : (byte[])row.CheckInImage,
+                    CheckOutImage = row.CheckOutImage == null ? null : (byte[])row.CheckOutImage,
+                    UserInfo = new User
+                    {
+                        UserID = row.UserID,
+                        FullName = row.FullName,
+                        Age = row.Age,
+                        Gender = row.Gender,
+                        Address = row.Address
+                    }
+                }).ToList();
+
+                Console.WriteLine($"[GetAllAttendance] Lấy được {list.Count} bản ghi từ DB");
+
+                foreach (var att in list)
+                    Console.WriteLine($"  -> {att.UserInfo.FullName} ({att.CheckInTime:dd/MM HH:mm})");
+
+                return list;
+            }
+        }
+
+        private System.Drawing.Image ByteArrayToImage(byte[] data)
+        {
+            using (var ms = new MemoryStream(data))
+            {
+                return System.Drawing.Image.FromStream(ms);
+            }
+        }
+
+        private static System.Drawing.Image BytesToImage(byte[] bytes)
+        {
+            using var ms = new MemoryStream(bytes);
+            return System.Drawing.Image.FromStream(ms);
         }
 
         public void Dispose()

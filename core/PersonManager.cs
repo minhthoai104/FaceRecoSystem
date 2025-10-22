@@ -39,19 +39,35 @@ namespace FaceRecoSystem.core
             }
         }
 
-        public bool AddNewUser(User newUser, List<Mat> faces)
+        public bool AddNewUser(User user, List<Mat> faces)
         {
             try
             {
-                _db.SaveFaceImagesAndEncodings(newUser, faces);
+                Console.WriteLine($"[AddNewUser] Bắt đầu thêm {user.FullName} ({user.UserID})");
+                if (faces == null || faces.Count < 3)
+                {
+                    Console.WriteLine("[AddNewUser] ❌ Không đủ ảnh (cần 3 ảnh)");
+                    return false;
+                }
+
+                // Debug từng ảnh
+                for (int i = 0; i < faces.Count; i++)
+                {
+                    Console.WriteLine($"[AddNewUser] Ảnh {i} size = {faces[i].Width}x{faces[i].Height}, channels={faces[i].Channels()}");
+                }
+
+                // Gọi lưu DB
+                _db.SaveFaceImagesAndEncodings(user, faces);
+                Console.WriteLine("[AddNewUser] ✅ Lưu DB thành công");
                 return true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[AddNewUser] {ex.Message}");
+                Console.WriteLine($"[AddNewUser] ❌ Lỗi: {ex.Message}\n{ex.StackTrace}");
                 return false;
             }
         }
+
 
         public List<Mat> CaptureThreeAngles(string name)
         {
@@ -216,10 +232,23 @@ namespace FaceRecoSystem.core
 
             return input.Clone();
         }
+        public List<User> GetAllPersons()
+        {
+            List<User> users;
+            try
+            {
+                users = _db.GetAllUsers();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GetAllPersons] {ex.Message}");
+                users = new List<User>();
+            }
 
+            return users;
+        }
     }
 
-    // ===== Mat Extension =====
     public static class MatExtensions
     {
         public static FaceRecognitionDotNet.Image ToFaceRecognitionImage(this Mat mat)

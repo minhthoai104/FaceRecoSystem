@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Windows.Forms;
 
 namespace FaceRecoSystem.controls
@@ -15,42 +13,55 @@ namespace FaceRecoSystem.controls
         {
             InitializeComponent();
             _db = db;
-        }
-
-        public AttendanceList()
-        {
+            this.Load += AttendanceList_Load;
         }
 
         private void AttendanceList_Load(object sender, EventArgs e)
         {
-            LoadPersonList();
+            SetupListView();
+            LoadAttendanceList();
         }
+        private void SetupListView()
+        {
+            listView1.View = View.Details;
+            listView1.FullRowSelect = true;
+            listView1.GridLines = true;
 
-        private void LoadPersonList()
+            if (listView1.Columns.Count == 0)
+            {
+                listView1.Columns.Add("Họ tên", 150);
+                listView1.Columns.Add("Mã nhân viên", 100);
+                listView1.Columns.Add("Giờ vào", 150);
+                listView1.Columns.Add("Giờ ra", 150);
+            }
+        }
+        private void LoadAttendanceList()
         {
             listView1.Items.Clear();
 
             try
             {
-                var persons = _db.GetAllPersons();
-                foreach (var p in persons)
+                var list = _db.GetAllAttendance();
+                Console.WriteLine($"[AttendanceList] Load {list.Count} bản ghi");
+
+                foreach (var att in list)
                 {
-                    var item = new ListViewItem(p.FullName);
-                    item.SubItems.Add(p.Age.ToString());
-                    item.SubItems.Add(p.Gender);
-                    item.SubItems.Add(p.Address);
-                    item.SubItems.Add(p.CheckInTime?.ToString("HH:mm:ss dd/MM/yyyy") ?? "-");
-                    item.SubItems.Add(p.CheckOutTime?.ToString("HH:mm:ss dd/MM/yyyy") ?? "-");
-                    item.Tag = p;
+                    var u = att.UserInfo;
+                    var item = new ListViewItem(u.FullName);
+                    item.SubItems.Add(u.UserID);
+                    item.SubItems.Add(att.CheckInTime.ToString("HH:mm:ss dd/MM/yyyy"));
+                    item.SubItems.Add(att.CheckOutTime?.ToString("HH:mm:ss dd/MM/yyyy") ?? "-");
+                    item.Tag = att;
                     listView1.Items.Add(item);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error loading attendance list: {ex.Message}", "Error",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Console.WriteLine($"[AttendanceList] Lỗi load dữ liệu: {ex}");
             }
         }
+
+
 
         private void listView1_SelectedIndexChanged(object sender, EventArgs e)
         {
@@ -58,15 +69,28 @@ namespace FaceRecoSystem.controls
                 return;
 
             var selected = listView1.SelectedItems[0];
-            var person = selected.Tag as User;
-            if (person == null) return;
+            var att = selected.Tag as Attendance;
+            if (att == null) return;
 
-            lblName.Text = person.FullName;
-            lblGender.Text = person.Gender;
-            lblAddress.Text = person.Address;
-            lblAge.Text = person.Age.ToString();
-            picCheckIn.Image = LoadImageSafe(person.CheckInImagePath);
-            picCheckOut.Image = LoadImageSafe(person.CheckOutImagePath);
+            var u = att.UserInfo;
+            lblName.Text = "Họ và tên: " + u.FullName;
+            lblGender.Text = "Giới tính: " + u.Gender;
+            lblAge.Text = "Tuổi: " + u.Age.ToString();
+            lblAddress.Text = "Địa chỉ: " + u.Address;
+
+            picCheckIn.Image = BytesToImage(att.CheckInImage);
+            picCheckOut.Image = BytesToImage(att.CheckOutImage);
+
+        }
+        private Image BytesToImage(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length == 0)
+                return null;
+
+            using (var ms = new MemoryStream(bytes))
+            {
+                return Image.FromStream(ms);
+            }
         }
 
         private Image LoadImageSafe(string path)
@@ -78,6 +102,11 @@ namespace FaceRecoSystem.controls
             }
             catch { }
             return null;
+        }
+
+        private void btnRefresh_Click(object sender, EventArgs e)
+        {
+            LoadAttendanceList();
         }
     }
 }

@@ -1,307 +1,67 @@
 ﻿using FaceRecoSystem.core;
 using OpenCvSharp;
+using OpenCvSharp.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.IO;
 using System.Windows.Forms;
 
 namespace FaceRecoSystem.controls
 {
     public partial class AddPersonControl : UserControl
     {
+        public event EventHandler CancelRequested;
         private readonly PersonManager _personMgr;
-        private List<Mat> _capturedImagePaths;
+        private List<Mat> _capturedImages;
+        private static readonly Random _random = new Random();
         public AddPersonControl(PersonManager personMgr)
         {
             InitializeComponent();
-            SetupLayout();
+
             _personMgr = personMgr;
+            _capturedImages = new List<Mat>();
+
+            // Gắn sự kiện cho các nút từ giao diện
+            this.btnStartCapture.Click += new System.EventHandler(this.btnStartCapture_Click);
+            this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
+            this.txtAge.TextChanged += new System.EventHandler(this.TxtAge_TextChanged);
+            this.btnDeleteImages.Click += new System.EventHandler(this.btnDeleteImages_Click); // <-- THÊM DÒNG NÀY
         }
+
         private string GenerateUserID()
         {
-            string datePart = DateTime.Now.ToString("yyMMdd");
-            string randomPart = new Random().Next(10, 99).ToString();
-            return $"NV{datePart}{randomPart}";
+            string randomPart = _random.Next(99).ToString("D2");
+            return $"NV{DateTime.Now:yyMMdd}{randomPart}";
         }
-        private void SetupLayout()
+
+        private void btnDeleteImages_Click(object sender, EventArgs e)
         {
-            this.Controls.Clear();
-            var mainCenteringLayout = new TableLayoutPanel
+            if (_capturedImages == null || _capturedImages.Count == 0)
             {
-                Dock = DockStyle.Fill,
-                ColumnCount = 3,
-                RowCount = 1,
-                AutoScroll = true
-            };
-            mainCenteringLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-            mainCenteringLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            mainCenteringLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-            this.Controls.Add(mainCenteringLayout);
-            var contentPanel = new FlowLayoutPanel
-            {
-                FlowDirection = FlowDirection.TopDown,
-                WrapContents = false,
-                AutoSize = true,
-                MaximumSize = new System.Drawing.Size(800, 0),
-                Padding = new Padding(20),
-                BackColor = Color.White
-            };
-            mainCenteringLayout.Controls.Add(contentPanel, 1, 0);
-            lblTitle = new Label
-            {
-                Text = "THÊM NHÂN VIÊN MỚI",
-                Font = new Font("Segoe UI", 18, FontStyle.Bold),
-                ForeColor = Color.FromArgb(40, 40, 40),
-                AutoSize = false,
-                Width = 760,
-                Height = 40,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Margin = new Padding(0, 10, 0, 30),
-            };
-            contentPanel.Controls.Add(lblTitle);
-            var infoGrid = new TableLayoutPanel
-            {
-                ColumnCount = 2,
-                RowCount = 4,
-                AutoSize = true,
-                MinimumSize = new System.Drawing.Size(660, 0),
-                Margin = new Padding(50, 0, 50, 0)
-            };
-            infoGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F));
-            infoGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-
-            lblName = new Label { Text = "Họ và tên:", Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
-            txtName = new TextBox { Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(5, 5, 0, 10) };
-            infoGrid.Controls.Add(lblName, 0, 0);
-            infoGrid.Controls.Add(txtName, 1, 0);
-
-            lblAge = new Label { Text = "Tuổi:", Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
-            txtAge = new TextBox { Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(5, 5, 0, 10) };
-            infoGrid.Controls.Add(lblAge, 0, 1);
-            infoGrid.Controls.Add(txtAge, 1, 1);
-            txtAge.TextChanged += TxtAge_TextChanged;
-            lblGender = new Label { Text = "Giới tính:", Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
-            cbGender = new ComboBox { Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left | AnchorStyles.Right, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(5, 5, 0, 10) };
-            cbGender.Items.AddRange(new object[] { "Nam", "Nữ", "Khác" });
-            infoGrid.Controls.Add(lblGender, 0, 2);
-            infoGrid.Controls.Add(cbGender, 1, 2);
-
-            lblAddress = new Label { Text = "Địa chỉ:", Font = new Font("Segoe UI", 12), Anchor = AnchorStyles.Left, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
-            txtAddress = new TextBox { Font = new Font("Segoe UI", 12), Dock = DockStyle.Fill, Multiline = true, Height = 90, Margin = new Padding(5, 5, 0, 10) };
-            infoGrid.Controls.Add(lblAddress, 0, 3);
-            infoGrid.Controls.Add(txtAddress, 1, 3);
-
-            contentPanel.Controls.Add(infoGrid);
-
-            var faceSectionHeader = new TableLayoutPanel
-            {
-                ColumnCount = 2,
-                RowCount = 1,
-                Dock = DockStyle.Fill,
-                Margin = new Padding(0, 20, 0, 15)
-            };
-            faceSectionHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            faceSectionHeader.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-
-            var lblFaceHeader = new Label
-            {
-                Text = "ẢNH KHUÔN MẶT",
-                Font = new Font("Segoe UI", 15, FontStyle.Bold),
-                AutoSize = true,
-                Anchor = AnchorStyles.Left,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
-            btnStartCapture = new Button
-            {
-                Text = "📸 Bắt đầu chụp",
-                BackColor = Color.FromArgb(63, 114, 175),
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 11, FontStyle.Bold),
-                FlatStyle = FlatStyle.Flat,
-                Size = new System.Drawing.Size(200, 40),
-                Anchor = AnchorStyles.Right
-            };
-            btnStartCapture.FlatAppearance.BorderSize = 0;
-            btnStartCapture.Click += btnStartCapture_Click;
-
-            faceSectionHeader.Controls.Add(lblFaceHeader, 0, 0);
-            faceSectionHeader.Controls.Add(btnStartCapture, 1, 0);
-
-            contentPanel.Controls.Add(faceSectionHeader);
-
-            var picturesPanel = new FlowLayoutPanel
-            {
-                AutoSize = true,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false,
-                Width = 760,
-                Padding = new Padding(50, 0, 50, 0)
-            };
-
-            picFront = CreateFaceBox();
-            lblFront = CreateFaceLabel("Chính diện");
-
-            picLeft = CreateFaceBox();
-            lblLeft = CreateFaceLabel("Nghiêng trái");
-
-            picRight = CreateFaceBox();
-            lblRight = CreateFaceLabel("Nghiêng phải");
-
-            var faces = new (PictureBox pic, Label lbl)[]
-            {
-                (picFront, lblFront),
-                (picLeft, lblLeft),
-                (picRight, lblRight)
-            };
-
-            for (int i = 0; i < faces.Length; i++)
-            {
-                int index = i;
-                var card = new FlowLayoutPanel
-                {
-                    FlowDirection = FlowDirection.TopDown,
-                    Size = new System.Drawing.Size(200, 230),
-                    Margin = new Padding(10),
-                    BackColor = Color.White,
-                    Padding = new Padding(5)
-                };
-
-                var pic = faces[index].pic;
-                pic.Size = new System.Drawing.Size(180, 180);
-                pic.Margin = new Padding(10, 0, 10, 0);
-                pic.BorderStyle = BorderStyle.FixedSingle;
-                pic.SizeMode = PictureBoxSizeMode.Zoom;
-                pic.Dock = DockStyle.Fill;
-
-                var lbl = faces[index].lbl;
-                lbl.Font = new Font("Segoe UI", 11);
-                lbl.AutoSize = false;
-                lbl.Width = 200;
-                lbl.Height = 25;
-                lbl.TextAlign = ContentAlignment.MiddleCenter;
-
-                var btnDelete = new Button
-                {
-                    Text = "❌",
-                    BackColor = Color.FromArgb(220, 50, 50),
-                    ForeColor = Color.White,
-                    Size = new System.Drawing.Size(28, 28),
-                    FlatStyle = FlatStyle.Flat
-                };
-                btnDelete.FlatAppearance.BorderSize = 0;
-
-                var picPanel = new Panel
-                {
-                    Size = new System.Drawing.Size(180, 180),
-                    Margin = new Padding(0),
-                    Padding = new Padding(0)
-                };
-
-                picPanel.Controls.Add(pic);
-                picPanel.Controls.Add(btnDelete);
-
-                btnDelete.Location = new System.Drawing.Point(picPanel.Width - btnDelete.Width - 4, 4);
-                btnDelete.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-                btnDelete.BringToFront();
-
-                pic.Click += (s, e) =>
-                {
-                    using (var ofd = new OpenFileDialog { Filter = "Ảnh (*.jpg;*.png)|*.jpg;*.png" })
-                    {
-                        if (ofd.ShowDialog() == DialogResult.OK)
-                        {
-                            try
-                            {
-                                using (var fs = new FileStream(ofd.FileName, FileMode.Open, FileAccess.Read))
-                                {
-                                    var temp = Image.FromStream(fs);
-                                    var clone = new Bitmap(temp);
-                                    temp.Dispose();
-
-                                    pic.Image?.Dispose();
-                                    pic.Image = clone;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                MessageBox.Show("Không thể mở ảnh: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            }
-                        }
-                    }
-                };
-
-                btnDelete.Click += (s, e) =>
-                {
-                    if (pic.Image == null)
-                    {
-                        MessageBox.Show("Chưa có hình để xoá!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }
-                    else
-                    {
-                        pic.Image.Dispose();
-                        pic.Image = null;
-                    }
-                };
-
-                card.Controls.Add(picPanel);
-                card.Controls.Add(lbl);
-                picturesPanel.Controls.Add(card);
-
-                faces[index].pic.Click += (s, e) =>
-                {
-                    using (var ofd = new OpenFileDialog { Filter = "Ảnh (*.jpg;*.png)|*.jpg;*.png" })
-                    {
-                        if (ofd.ShowDialog() == DialogResult.OK)
-                        {
-                            faces[index].pic.Image = Image.FromFile(ofd.FileName);
-                        }
-                    }
-                };
+                MessageBox.Show("Chưa có ảnh nào để xóa.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
             }
-            contentPanel.Controls.Add(picturesPanel);
 
-            btnSave = new Button
-            {
-                Text = "💾 Lưu thông tin",
-                BackColor = Color.FromArgb(46, 160, 67),
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 12, FontStyle.Bold),
-                FlatStyle = FlatStyle.Flat,
-                Size = new System.Drawing.Size(200, 45),
-                Margin = new Padding(0, 30, 0, 20)
-            };
-            btnSave.FlatAppearance.BorderSize = 0;
-            btnSave.Click += btnSave_Click;
-
-            var saveButtonPanel = new FlowLayoutPanel { Width = 760, AutoSize = true };
-            saveButtonPanel.Controls.Add(btnSave);
-            saveButtonPanel.Padding = new Padding((760 - btnSave.Width) / 2, 0, 0, 0);
-
-            contentPanel.Controls.Add(saveButtonPanel);
+            // Gọi hàm dọn dẹp ảnh đã có
+            ClearAllFacePictures();
+            MessageBox.Show("Đã xóa tất cả ảnh. Bạn có thể chụp lại.", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        private PictureBox CreateFaceBox()
+        // Hàm ClearAllFacePictures bạn đã có, đảm bảo nó tồn tại
+        private void ClearAllFacePictures()
         {
-            return new PictureBox
-            {
-                Size = new System.Drawing.Size(150, 150),
-                BorderStyle = BorderStyle.FixedSingle,
-                SizeMode = PictureBoxSizeMode.Zoom,
-                BackColor = Color.WhiteSmoke
-            };
-        }
+            picThumbnailFront.Image?.Dispose();
+            picThumbnailLeft.Image?.Dispose();
+            picThumbnailRight.Image?.Dispose();
+            picThumbnailFront.Image = null;
+            picThumbnailLeft.Image = null;
+            picThumbnailRight.Image = null;
 
-        private Label CreateFaceLabel(string text)
-        {
-            return new Label
+            if (_capturedImages != null)
             {
-                Text = text,
-                Font = new Font("Segoe UI", 11),
-                TextAlign = ContentAlignment.MiddleCenter,
-                AutoSize = true
-            };
+                _capturedImages.ForEach(mat => mat.Dispose());
+                _capturedImages.Clear();
+            }
         }
 
         private void btnStartCapture_Click(object sender, EventArgs e)
@@ -309,24 +69,32 @@ namespace FaceRecoSystem.controls
             string name = txtName.Text.Trim();
             if (string.IsNullOrEmpty(name))
             {
-                MessageBox.Show("Vui lòng nhập họ tên!", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Vui lòng nhập họ tên trước khi chụp!", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                txtName.Focus();
                 return;
             }
 
-            _capturedImagePaths = _personMgr.CaptureThreeAngles(name);
+            // Gọi hàm chụp 3 góc mặt từ PersonManager (cửa sổ camera riêng sẽ hiện ra)
+            var capturedMats = _personMgr.CaptureThreeAngles(name);
 
-            if (_capturedImagePaths != null && _capturedImagePaths.Count == 3)
+            if (capturedMats != null && capturedMats.Count == 3)
             {
-                picFront.Image?.Dispose();
-                picLeft.Image?.Dispose();
-                picRight.Image?.Dispose();
+                // Dọn dẹp ảnh cũ nếu có
+                ClearAllFacePictures();
+                _capturedImages = capturedMats;
 
-                picFront.Image = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(_capturedImagePaths[0]);
-                picLeft.Image = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(_capturedImagePaths[1]);
-                picRight.Image = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(_capturedImagePaths[2]);
+                // Hiển thị ảnh đã chụp lên các thumbnail
+                picThumbnailFront.Image = BitmapConverter.ToBitmap(_capturedImages[0]);
+                picThumbnailLeft.Image = BitmapConverter.ToBitmap(_capturedImages[1]);
+                picThumbnailRight.Image = BitmapConverter.ToBitmap(_capturedImages[2]);
+
+                MessageBox.Show("Đã chụp thành công 3 góc mặt!", "Hoàn tất", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else
+            {
+                MessageBox.Show("Quá trình chụp đã bị hủy hoặc thất bại.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
-
 
         private void btnSave_Click(object sender, EventArgs e)
         {
@@ -334,61 +102,50 @@ namespace FaceRecoSystem.controls
             string gender = cbGender.Text;
             string address = txtAddress.Text.Trim();
 
+            // --- Validation (Kiểm tra dữ liệu) ---
+            if (string.IsNullOrWhiteSpace(name) || cbGender.SelectedIndex == -1)
+            {
+                MessageBox.Show("Vui lòng nhập đầy đủ Tên và Giới tính!", "Thiếu thông tin", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             if (!int.TryParse(txtAge.Text, out int age))
             {
                 MessageBox.Show("Vui lòng nhập tuổi là một con số hợp lệ!", "Lỗi Dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            if (age < 16 || age > 60)
+
+            if (age < 18 || age > 60)
             {
-                MessageBox.Show("Tuổi của nhân viên phải từ 16 đến 60.", "Tuổi không hợp lệ", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                MessageBox.Show("Vui lòng nhập họ tên!", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            if (_capturedImagePaths == null || _capturedImagePaths.Count < 3)
-            {
-                MessageBox.Show("Vui lòng chụp đủ 3 góc khuôn mặt trước khi lưu!", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Tuổi của nhân viên phải từ 18 đến 60.", "Tuổi không hợp lệ", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
+            if (_capturedImages == null || _capturedImages.Count < 3)
+            {
+                MessageBox.Show("Vui lòng chụp đủ 3 góc khuôn mặt trước khi lưu!", "Thiếu ảnh", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // --- Bắt đầu lưu ---
             try
             {
                 string userId = GenerateUserID();
 
-                byte[] frontVec = _personMgr.GetFaceEncodingAsBytes(_capturedImagePaths[0]);
-                byte[] leftVec = _personMgr.GetFaceEncodingAsBytes(_capturedImagePaths[1]);
-                byte[] rightVec = _personMgr.GetFaceEncodingAsBytes(_capturedImagePaths[2]);
+                byte[] frontVec = _personMgr.GetFaceEncodingAsBytes(_capturedImages[0]);
+                byte[] leftVec = _personMgr.GetFaceEncodingAsBytes(_capturedImages[1]);
+                byte[] rightVec = _personMgr.GetFaceEncodingAsBytes(_capturedImages[2]);
 
                 if (frontVec == null || leftVec == null || rightVec == null)
                 {
-                    MessageBox.Show("Không thể trích xuất đặc trưng khuôn mặt từ ảnh. Vui lòng chụp lại!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("Không thể trích xuất đặc trưng khuôn mặt từ một hoặc nhiều ảnh. Vui lòng chụp lại!", "Lỗi Encoding", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
-                // 2️⃣ Chuyển ảnh Mat sang byte[] để lưu gốc
-                byte[] frontImg, leftImg, rightImg;
-                using (var ms1 = new MemoryStream())
-                using (var ms2 = new MemoryStream())
-                using (var ms3 = new MemoryStream())
-                {
-                    var bmpFront = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(_capturedImagePaths[0]);
-                    var bmpLeft = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(_capturedImagePaths[1]);
-                    var bmpRight = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(_capturedImagePaths[2]);
+                byte[] frontImg = _capturedImages[0].ToBytes(".jpg");
+                byte[] leftImg = _capturedImages[1].ToBytes(".jpg");
+                byte[] rightImg = _capturedImages[2].ToBytes(".jpg");
 
-                    bmpFront.Save(ms1, System.Drawing.Imaging.ImageFormat.Jpeg);
-                    bmpLeft.Save(ms2, System.Drawing.Imaging.ImageFormat.Jpeg);
-                    bmpRight.Save(ms3, System.Drawing.Imaging.ImageFormat.Jpeg);
-
-                    frontImg = ms1.ToArray();
-                    leftImg = ms2.ToArray();
-                    rightImg = ms3.ToArray();
-                }
-
-                // 3️⃣ Tạo đối tượng User
                 var newUser = new User
                 {
                     UserID = userId,
@@ -406,43 +163,38 @@ namespace FaceRecoSystem.controls
                     UpdatedAt = DateTime.Now
                 };
 
-                // 4️⃣ Lưu vào DB
-                bool result = _personMgr.AddNewUser(newUser, _capturedImagePaths);
+                bool result = _personMgr.AddNewUser(newUser, _capturedImages);
 
                 if (result)
                 {
-                    MessageBox.Show($"Đã lưu nhân viên {name} thành công!\nMã NV: {userId}",
-                                    "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                    // Reset giao diện
-                    txtName.Clear();
-                    txtAge.Clear();
-                    txtAddress.Clear();
-                    cbGender.SelectedIndex = -1;
-
-                    picFront.Image?.Dispose();
-                    picLeft.Image?.Dispose();
-                    picRight.Image?.Dispose();
-
-                    _capturedImagePaths.ForEach(m => m.Dispose());
-                    _capturedImagePaths = null;
+                    MessageBox.Show($"Đã lưu nhân viên {name} thành công!\nMã NV: {userId}", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    ResetForm();
                 }
                 else
                 {
-                    MessageBox.Show("Không thể lưu nhân viên. Vui lòng kiểm tra lại!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("Không thể lưu nhân viên. Có lỗi xảy ra trong quá trình xử lý!", "Lỗi CSDL", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Lỗi khi lưu nhân viên:\n" + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Lỗi nghiêm trọng khi lưu nhân viên:\n" + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private void ResetForm()
+        {
+            txtName.Clear();
+            txtAge.Clear();
+            txtAddress.Clear();
+            cbGender.SelectedIndex = -1;
+            ClearAllFacePictures();
         }
 
         private void TxtAge_TextChanged(object sender, EventArgs e)
         {
             if (int.TryParse(txtAge.Text, out int age))
             {
-                txtAge.ForeColor = (age < 16 || age > 60) ? Color.Red : Color.Black;
+                txtAge.ForeColor = (age < 18 || age > 60) ? Color.Red : Color.Black;
             }
             else if (!string.IsNullOrEmpty(txtAge.Text))
             {
@@ -453,33 +205,15 @@ namespace FaceRecoSystem.controls
                 txtAge.ForeColor = Color.Black;
             }
         }
-        private void btnDeleteImage_Click(object sender, EventArgs e)
-        {
-            Button btn = sender as Button;
-            if (btn.Name.Contains("Front")) ClearPictureBoxImage(picFront);
-            else if (btn.Name.Contains("Left")) ClearPictureBoxImage(picLeft);
-            else if (btn.Name.Contains("Right")) ClearPictureBoxImage(picRight);
-        }
-        private void ClearPictureBoxImage(PictureBox pb)
-        {
-            if (pb?.Image != null)
-            {
-                pb.Image.Dispose();
-                pb.Image = null;
-            }
-        }
-        private void btnRefreshImages_Click(object sender, EventArgs e)
-        {
-            ClearAllFacePictures();
-        }
-        private void ClearAllFacePictures()
-        {
-            ClearPictureBoxImage(picFront);
-            ClearPictureBoxImage(picLeft);
-            ClearPictureBoxImage(picRight);
-            _capturedImagePaths = null;
-            MessageBox.Show("Đã xóa ảnh!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
 
+        private void btnCancel_Click(object sender, EventArgs e)
+        {
+            txtName.Clear();
+            txtAge.Clear();
+            txtAddress.Clear();
+            cbGender.SelectedIndex = -1;
+            ClearAllFacePictures();
+            CancelRequested?.Invoke(this, EventArgs.Empty);
+        }
     }
 }

@@ -9,12 +9,10 @@ namespace FaceRecoSystem
         private Panel panelMenu;
         private Panel panelMain;
         private Button btnAttendance;
-        private Button btnAddPerson;
-        private Button btnUpdatePerson;
-        private Button btnDeletePerson;
         private Button btnViewAttendanceList;
         private Button btnViewEmpList;
         private Label lblTitle;
+        private Button btnSettings;
 
         protected override void Dispose(bool disposing)
         {
@@ -26,13 +24,11 @@ namespace FaceRecoSystem
         private void InitializeComponent()
         {
             this.panelMenu = new System.Windows.Forms.Panel();
-            this.btnDeletePerson = new System.Windows.Forms.Button();
-            this.btnUpdatePerson = new System.Windows.Forms.Button();
-            this.btnAddPerson = new System.Windows.Forms.Button();
             this.btnViewAttendanceList = new System.Windows.Forms.Button();
             this.btnAttendance = new System.Windows.Forms.Button();
             this.lblTitle = new System.Windows.Forms.Label();
             this.btnViewEmpList = new System.Windows.Forms.Button();
+            this.btnSettings = new System.Windows.Forms.Button();
             this.panelMain = new System.Windows.Forms.Panel();
             this.panelMenu.SuspendLayout();
             this.SuspendLayout();
@@ -41,60 +37,29 @@ namespace FaceRecoSystem
             // 
             this.panelMenu.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(63)))), ((int)(((byte)(114)))), ((int)(((byte)(175)))));
             this.panelMenu.Controls.Add(this.btnViewEmpList);
-            this.panelMenu.Controls.Add(this.btnDeletePerson);
-            this.panelMenu.Controls.Add(this.btnUpdatePerson);
-            this.panelMenu.Controls.Add(this.btnAddPerson);
             this.panelMenu.Controls.Add(this.btnViewAttendanceList);
             this.panelMenu.Controls.Add(this.btnAttendance);
+            this.panelMenu.Controls.Add(this.btnSettings);
             this.panelMenu.Controls.Add(this.lblTitle);
             this.panelMenu.Dock = System.Windows.Forms.DockStyle.Left;
             this.panelMenu.Location = new System.Drawing.Point(0, 0);
             this.panelMenu.Name = "panelMenu";
             this.panelMenu.Size = new System.Drawing.Size(224, 700);
             this.panelMenu.TabIndex = 0;
-            // 
-            // button1
-            // 
-
-            // 
-            // btnDeletePerson
-            // 
-            this.btnDeletePerson.Dock = System.Windows.Forms.DockStyle.Top;
-            this.btnDeletePerson.FlatAppearance.BorderSize = 0;
-            this.btnDeletePerson.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnDeletePerson.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
-            this.btnDeletePerson.ForeColor = System.Drawing.Color.White;
-            this.btnDeletePerson.Location = new System.Drawing.Point(0, 300);
-            this.btnDeletePerson.Name = "btnDeletePerson";
-            this.btnDeletePerson.Size = new System.Drawing.Size(224, 60);
-            this.btnDeletePerson.TabIndex = 2;
-            this.btnDeletePerson.Text = "🗑 Xóa nhân viên";
-            // 
-            // btnUpdatePerson
-            // 
-            this.btnUpdatePerson.Dock = System.Windows.Forms.DockStyle.Top;
-            this.btnUpdatePerson.FlatAppearance.BorderSize = 0;
-            this.btnUpdatePerson.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnUpdatePerson.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
-            this.btnUpdatePerson.ForeColor = System.Drawing.Color.White;
-            this.btnUpdatePerson.Location = new System.Drawing.Point(0, 240);
-            this.btnUpdatePerson.Name = "btnUpdatePerson";
-            this.btnUpdatePerson.Size = new System.Drawing.Size(224, 60);
-            this.btnUpdatePerson.TabIndex = 3;
-            this.btnUpdatePerson.Text = "🛠 Cập nhật";
-            // 
-            // btnAddPerson
-            // 
-            this.btnAddPerson.Dock = System.Windows.Forms.DockStyle.Top;
-            this.btnAddPerson.FlatAppearance.BorderSize = 0;
-            this.btnAddPerson.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnAddPerson.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
-            this.btnAddPerson.ForeColor = System.Drawing.Color.White;
-            this.btnAddPerson.Location = new System.Drawing.Point(0, 180);
-            this.btnAddPerson.Name = "btnAddPerson";
-            this.btnAddPerson.Size = new System.Drawing.Size(224, 60);
-            this.btnAddPerson.TabIndex = 4;
-            this.btnAddPerson.Text = "➕ Thêm nhân viên";
+            //
+            // btnSettings
+            //
+            this.btnSettings.Dock = System.Windows.Forms.DockStyle.Bottom; // Đặt ở dưới cùng
+            this.btnSettings.FlatAppearance.BorderSize = 0;
+            this.btnSettings.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnSettings.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
+            this.btnSettings.ForeColor = System.Drawing.Color.White;
+            this.btnSettings.Location = new System.Drawing.Point(0, 640); // Điều chỉnh vị trí Y
+            this.btnSettings.Name = "btnSettings";
+            this.btnSettings.Size = new System.Drawing.Size(224, 60);
+            this.btnSettings.TabIndex = 7; // Số index tiếp theo
+            this.btnSettings.Text = "⚙️ Cài đặt";
+            this.btnSettings.UseVisualStyleBackColor = true;
             // 
             // btnViewAttendanceList
             // 

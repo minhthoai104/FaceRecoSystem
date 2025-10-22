@@ -1,9 +1,11 @@
-﻿using FaceRecognitionDotNet;
+﻿using FaceLibrary;
+using FaceRecognitionDotNet;
 using FaceRecoSystem.controls;
 using FaceRecoSystem.core;
 using OpenCvSharp;
 using OpenCvSharp.Extensions;
 using System;
+using System.Data.SqlClient;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -19,13 +21,14 @@ namespace FaceRecoSystem
         private CameraService _camService;
         private PersonManager _personMgr;
         private CascadeClassifier _faceDetector;
-
+        private SqlConnection _sqlConnection;
         private Button _activeButton;
         private Panel _activeBorderPanel;
         private PictureBox _cameraView;
 
         public Form1()
         {
+            _sqlConnection = new SqlConnection(DatabaseHelper.ConnectionString);
             InitializeComponent();
             InitializeFaceSystem();
             InitButtonEvents();
@@ -131,34 +134,45 @@ namespace FaceRecoSystem
 
         private void LoadPage(Button btn)
         {
+            foreach (Control ctrl in panelMain.Controls)
+            {
+                if (ctrl is AttendanceControl attendance)
+                {
+                    attendance.StopCamera();
+                    Console.WriteLine("[Form1] Đã dừng camera khi rời tab Attendance.");
+                }
+            }
             panelMain.Controls.Clear();
-            _cameraView.Visible = false;
+
+            if (_cameraView != null)
+                _cameraView.Visible = false;
 
             UserControl page = null;
 
             switch (btn.Name)
             {
                 case "btnAttendance":
-                    page = new AttendanceControl(_fr, _db);
+                    var attendancePage = new AttendanceControl(DatabaseHelper.ConnectionString);
+                    attendancePage.RegisterRequested += AttendanceControl_RegisterRequested;
+                    page = attendancePage;
                     break;
 
                 case "btnViewAttendanceList":
-                    page = new AttendanceList();
+                    page = new AttendanceList(_db);
                     break;
 
-                case "btnAddPerson":
-                    page = new AddPersonControl(_personMgr);
-                    break;
-
-                case "btnUpdatePerson":
-                    page = new UpdatePersonControl(_personMgr, _fr, _db);
-                    break;
-
-                case "btnDeletePerson":
-                    page = new DeletePersonControl(_personMgr);
-                    break;
                 case "btnViewEmpList":
-                    page = new PersonListControl();
+                    var personList = new PersonListControl();
+                    personList.InitializeDatabase(_db);
+
+                    personList.AddPersonRequested += PersonList_AddPersonRequested;
+                    personList.UpdateUserRequested += PersonList_UpdateUserRequested;
+
+                    page = personList;
+                    break;
+
+                case "btnSettings":
+                    page = new SettingControl();
                     break;
             }
 
@@ -169,6 +183,102 @@ namespace FaceRecoSystem
             }
         }
 
+        private void PersonList_AddPersonRequested(object sender, EventArgs e)
+        {
+            if (_activeButton != null)
+            {
+                var originalColor = Color.FromArgb(63, 114, 175);
+                _activeButton.BackColor = originalColor;
+                _activeButton.ForeColor = Color.White;
+            }
+            _activeButton = null;
+            _activeBorderPanel.Visible = false;
+
+            panelMain.Controls.Clear();
+            var addPage = new AddPersonControl(_personMgr);
+            addPage.Dock = DockStyle.Fill;
+
+            addPage.CancelRequested += GoBackToPersonList;
+
+            panelMain.Controls.Add(addPage);
+        }
+
+        private void PersonList_UpdateUserRequested(object sender, UserEventArgs e)
+        {
+            if (_activeButton != null)
+            {
+                var originalColor = Color.FromArgb(63, 114, 175);
+                _activeButton.BackColor = originalColor;
+                _activeButton.ForeColor = Color.White;
+            }
+            _activeButton = null;
+            _activeBorderPanel.Visible = false;
+
+            panelMain.Controls.Clear();
+            var updatePage = new UpdatePersonControl(_personMgr, _fr, _db);
+            updatePage.Dock = DockStyle.Fill;
+
+            updatePage.CloseRequested += GoBackToPersonList;
+
+            panelMain.Controls.Add(updatePage);
+
+            updatePage.LoadUserForUpdate(e.SelectedUser);
+        }
+
+        private void AttendanceControl_RegisterRequested(object sender, EventArgs e)
+        {
+            if (sender is AttendanceControl attendance)
+            {
+                attendance.StopCamera();
+                Console.WriteLine("[Form1] Camera đã tắt khi chuyển sang trang Đăng ký.");
+            }
+            if (_activeButton != null)
+            {
+                var originalColor = Color.FromArgb(63, 114, 175);
+                _activeButton.BackColor = originalColor;
+                _activeButton.ForeColor = Color.White;
+            }
+            _activeButton = null;
+            _activeBorderPanel.Visible = false;
+
+            panelMain.Controls.Clear();
+            var addPage = new AddPersonControl(_personMgr);
+            addPage.Dock = DockStyle.Fill;
+
+            addPage.CancelRequested += GoBackToAttendance;
+            panelMain.Controls.Add(addPage);
+        }
+
+        private void GoBackToAttendance(object sender, EventArgs e)
+        {
+            var btnAttendance = panelMenu.Controls.OfType<Button>().FirstOrDefault(b => b.Name == "btnAttendance");
+
+            if (btnAttendance != null)
+            {
+                ActivateButton(btnAttendance);
+            }
+            else
+            {
+                if (panelMenu.Controls.OfType<Button>().Any())
+                {
+                    ActivateButton(panelMenu.Controls.OfType<Button>().First());
+                }
+            }
+        }
+
+        private void GoBackToPersonList(object sender, EventArgs e)
+        {
+            var btnList = panelMenu.Controls.OfType<Button>().FirstOrDefault(b => b.Name == "btnViewEmpList");
+
+            if (btnList != null)
+            {
+                ActivateButton(btnList);
+            }
+            else
+            {
+                GoBackToAttendance(sender, e);
+            }
+        }
         private void FaceReco_Load(object sender, EventArgs e)
         {
             ActivateButton(btnAttendance);

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 
 namespace FaceRecoSystem
 {
@@ -26,5 +27,23 @@ namespace FaceRecoSystem
         public DateTime? CheckOutTime { get; set; }
         public string CheckInImagePath { get; set; }
         public string CheckOutImagePath { get; set; }
+
+        public int MinCheckOutTimeInMinutes;
+        public int? CheckInCooldownInMinutes;
+        public string FaceFrontPath { get; set; }
+
+        // Helper: lưu byte[] thành file tạm và trả về path
+        public static string SaveBytesToTempFile(byte[] bytes, string prefix = "face")
+        {
+            if (bytes == null || bytes.Length == 0) return null;
+            try
+            {
+                string ext = ".jpg";
+                string temp = Path.Combine(Path.GetTempPath(), $"{prefix}_{Guid.NewGuid():N}{ext}");
+                File.WriteAllBytes(temp, bytes);
+                return temp;
+            }
+            catch { return null; }
+        }
     }
 }
